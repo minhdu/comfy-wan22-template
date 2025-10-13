@@ -1,0 +1,11 @@
+.idea/*
+assets/*
+test_resources/*
+tests/*
+.env
+
+# macOS system files
+.DS_Store
+
+# Ignore zip files in workflows folder
+workflows/**/*.zip
