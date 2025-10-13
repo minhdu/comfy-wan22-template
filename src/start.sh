@@ -163,6 +163,10 @@ TEXT_ENCODERS_DIR="$NETWORK_VOLUME/ComfyUI/models/text_encoders"
 CLIP_VISION_DIR="$NETWORK_VOLUME/ComfyUI/models/clip_vision"
 VAE_DIR="$NETWORK_VOLUME/ComfyUI/models/vae"
 LORAS_DIR="$NETWORK_VOLUME/ComfyUI/models/loras"
+UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
+UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
+EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
+mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
 
 # Download 480p native models
 if [ "$download_480p_native_models" == "true" ]; then
@@ -322,11 +326,11 @@ done
 
 echo "✅ All models downloaded successfully!"
 
-# ========== 🔻🔻🔻 NEW: EXTRA MODELS (user-specified) 🔻🔻🔻
+# ========== 📻📻📻 NEW: EXTRA MODELS (user-specified) 📻📻📻
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📥 EXTRA MODELS • "
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔥 EXTRA MODELS • "
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Ensure destination folders
 UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
@@ -334,36 +338,45 @@ UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
 EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
 mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
 
-set -x
+# Use full path to download script
+DOWNLOAD_SCRIPT="/usr/local/bin/download_with_aria.py"
 
-# Bảo đảm token được truyền
-export civitai_token="${civitai_token:-${CIVITAI_TOKEN:-}}"
+# Test script trước khi chạy
+if [ ! -f "/usr/local/bin/download_with_aria.py" ]; then
+    echo "❌ ERROR: download_with_aria.py not found!"
+    exit 1
+fi
+
+echo "Testing download script..."
+python3 /usr/local/bin/download_with_aria.py --help || {
+    echo "❌ ERROR: Cannot execute download script"
+    exit 1
+}
 
 # GGUF → models/unet
-/usr/local/bin/download_with_aria.py -m 2060943 -o "$UNET_DIR"
-/usr/local/bin/download_with_aria.py -m 2060527 -o "$UNET_DIR"
+python3 "$DOWNLOAD_SCRIPT" -m 2060943 -o "$UNET_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 2060527 -o "$UNET_DIR" &
 
 # LoRA → models/loras
-/usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR"
-/usr/local/bin/download_with_aria.py -m 2083303 -o "$LORAS_DIR"
-/usr/local/bin/download_with_aria.py -m 2073605 -o "$LORAS_DIR"
-/usr/local/bin/download_with_aria.py -m 1873831 -o "$LORAS_DIR"
+python3 "$DOWNLOAD_SCRIPT" -m 1900322 -o "$LORAS_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 2083303 -o "$LORAS_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 2073605 -o "$LORAS_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 1873831 -o "$LORAS_DIR" &
 
 # VAE → models/vae
-/usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR"
+python3 "$DOWNLOAD_SCRIPT" -m 1191929 -o "$VAE_DIR" &
 
 # Upscaler (Remacri) → models/upscale_models
-/usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR"
+python3 "$DOWNLOAD_SCRIPT" -m 164821 -o "$UPSCALE_DIR" &
 
 # Embeddings → models/embeddings
-/usr/local/bin/download_with_aria.py -m 1550840 -o "$EMB_DIR"
-/usr/local/bin/download_with_aria.py -m 1558647 -o "$EMB_DIR"
-/usr/local/bin/download_with_aria.py -m 1860747 -o "$EMB_DIR"
-set +x
+python3 "$DOWNLOAD_SCRIPT" -m 1550840 -o "$EMB_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 1558647 -o "$EMB_DIR" &
+python3 "$DOWNLOAD_SCRIPT" -m 1860747 -o "$EMB_DIR" &
 
 # Wait for any extra aria2 jobs (HF direct)
 while pgrep -x "aria2c" > /dev/null; do
-    echo "🔽 Extra model downloads still in progress..."
+    echo "📽 Extra model downloads still in progress..."
     sleep 5
 done
 echo "✅ Extra models: done"
