@@ -326,62 +326,6 @@ done
 
 echo "✅ All models downloaded successfully!"
 
-# ========== 📻📻📻 NEW: EXTRA MODELS (user-specified) 📻📻📻
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔥 EXTRA MODELS • "
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Ensure destination folders
-UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
-UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
-EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
-mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
-
-# Use full path to download script
-DOWNLOAD_SCRIPT="/usr/local/bin/download_with_aria.py"
-
-# Test script trước khi chạy
-if [ ! -f "/usr/local/bin/download_with_aria.py" ]; then
-    echo "❌ ERROR: download_with_aria.py not found!"
-    exit 1
-fi
-
-echo "Testing download script..."
-python3 /usr/local/bin/download_with_aria.py --help || {
-    echo "❌ ERROR: Cannot execute download script"
-    exit 1
-}
-
-# GGUF → models/unet
-python3 "$DOWNLOAD_SCRIPT" -m 2060943 -o "$UNET_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 2060527 -o "$UNET_DIR" &
-
-# LoRA → models/loras
-python3 "$DOWNLOAD_SCRIPT" -m 1900322 -o "$LORAS_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 2083303 -o "$LORAS_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 2073605 -o "$LORAS_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 1873831 -o "$LORAS_DIR" &
-
-# VAE → models/vae
-python3 "$DOWNLOAD_SCRIPT" -m 1191929 -o "$VAE_DIR" &
-
-# Upscaler (Remacri) → models/upscale_models
-python3 "$DOWNLOAD_SCRIPT" -m 164821 -o "$UPSCALE_DIR" &
-
-# Embeddings → models/embeddings
-python3 "$DOWNLOAD_SCRIPT" -m 1550840 -o "$EMB_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 1558647 -o "$EMB_DIR" &
-python3 "$DOWNLOAD_SCRIPT" -m 1860747 -o "$EMB_DIR" &
-
-# Wait for any extra aria2 jobs (HF direct)
-while pgrep -x "aria2c" > /dev/null; do
-    echo "📽 Extra model downloads still in progress..."
-    sleep 5
-done
-echo "✅ Extra models: done"
-# ========== 🔺🔺🔺 END EXTRA MODELS 🔺🔺🔺"
-
 # poll every 5 s until the PID is gone
   while kill -0 "$BUILD_PID" 2>/dev/null; do
     echo "🛠️ Building SageAttention in progress... (this can take around 5 minutes)"
@@ -392,6 +336,60 @@ echo "✅ Extra models: done"
 
 echo "All downloads completed!"
 
+# ========== 📻📻📻 NEW: EXTRA MODELS (user-specified) 📻📻📻
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔥 EXTRA MODELS • $(date)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Ensure destination folders
+UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
+UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
+EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
+mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
+
+echo "Checking download script..."
+if [ -f "/usr/local/bin/download_with_aria.py" ]; then
+    echo "✅ download_with_aria.py found"
+    
+    # GGUF → models/unet
+    echo "📦 Downloading GGUF models to $UNET_DIR"
+    (cd "$UNET_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2060943) &
+    (cd "$UNET_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2060527) &
+
+    # LoRA → models/loras
+    echo "📦 Downloading LoRA models to $LORAS_DIR"
+    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1900322) &
+    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2083303) &
+    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2073605) &
+    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1873831) &
+
+    # VAE → models/vae
+    echo "📦 Downloading VAE to $VAE_DIR"
+    (cd "$VAE_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1191929) &
+
+    # Upscaler → models/upscale_models
+    echo "📦 Downloading Upscaler to $UPSCALE_DIR"
+    (cd "$UPSCALE_DIR" && python3 /usr/local/bin/download_with_aria.py -m 164821) &
+
+    # Embeddings → models/embeddings
+    echo "📦 Downloading Embeddings to $EMB_DIR"
+    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1550840) &
+    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1558647) &
+    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1860747) &
+
+    # Wait for extra downloads
+    echo "⏳ Waiting for extra model downloads..."
+    while pgrep -x "aria2c" > /dev/null; do
+        echo "📽 Extra model downloads still in progress..."
+        sleep 5
+    done
+    echo "✅ Extra models download complete"
+else
+    echo "❌ ERROR: download_with_aria.py not found at /usr/local/bin/"
+    ls -la /usr/local/bin/ | grep download
+fi
+# ========== 📺📺📺 END EXTRA MODELS 📺📺📺
 
 echo "Downloading upscale models"
 mkdir -p "$NETWORK_VOLUME/ComfyUI/models/upscale_models"
