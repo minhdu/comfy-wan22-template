@@ -319,7 +319,65 @@ while pgrep -x "aria2c" > /dev/null; do
 done
 
 
-echo "✅ All models downloaded successfully!"
+echo "✅ All models downloaded successfully!
+
+# ========== 🔻🔻🔻 NEW: EXTRA MODELS (user-specified) 🔻🔻🔻
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📥 EXTRA MODELS • tải bổ sung theo loại (đúng thư mục)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Helper to download civitai page if civitai-dl exists
+download_civitai_page() { # civitai_page_url dest_dir
+  local url="$1"; local dest="$2"
+  mkdir -p "$dest"
+  if command -v civitai-dl >/dev/null 2>&1; then
+    echo "📦 civitai-dl: $url → $dest"
+    civitai-dl "$url" "$dest" || true
+  elif command -v download_with_aria.py >/dev/null 2>&1; then
+    echo "⚠️ civitai-dl not found; 'download_with_aria.py' requires numeric IDs. Skipping page URL: $url"
+    echo "   → Bạn có thể cài civitai-dl hoặc đổi sang link direct/file/ID."
+  else
+    echo "⚠️ No civitai downloader available. Skipping: $url"
+  fi
+}
+
+# Ensure destination folders
+UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
+UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
+EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
+mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
+
+# GGUF → models/unet
+download_civitai_page "https://civitai.com/models/1820829?modelVersionId=2060943" "$UNET_DIR"
+download_civitai_page "https://civitai.com/models/1820829?modelVersionId=2060527" "$UNET_DIR"
+
+# LoRA → models/loras
+download_civitai_page "https://civitai.com/models/1678575?modelVersionId=1900322" "$LORAS_DIR"
+download_model "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" "$LORAS_DIR/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+download_civitai_page "https://civitai.com/models/1307155?modelVersionId=2083303" "$LORAS_DIR"
+download_civitai_page "https://civitai.com/models/1307155?modelVersionId=2073605" "$LORAS_DIR"
+download_civitai_page "https://civitai.com/models/1224788?modelVersionId=1873831" "$LORAS_DIR"
+
+# VAE → models/vae
+download_civitai_page "https://civitai.com/models/152040?modelVersionId=1191929" "$VAE_DIR"
+
+# Upscaler (Remacri) → models/upscale_models
+download_civitai_page "https://civitai.com/models/147759/remacri" "$UPSCALE_DIR"
+
+# Embeddings → models/embeddings
+download_civitai_page "https://civitai.com/models/1302719?modelVersionId=1550840" "$EMB_DIR"
+download_civitai_page "https://civitai.com/models/1302719?modelVersionId=1558647" "$EMB_DIR"
+download_civitai_page "https://civitai.com/models/1302719?modelVersionId=1860747" "$EMB_DIR"
+
+# Wait for any extra aria2 jobs (HF direct)
+while pgrep -x "aria2c" > /dev/null; do
+    echo "🔽 Extra model downloads still in progress..."
+    sleep 5
+done
+echo "✅ Extra models: done"
+# ========== 🔺🔺🔺 END EXTRA MODELS 🔺🔺🔺
+"
 
 # poll every 5 s until the PID is gone
   while kill -0 "$BUILD_PID" 2>/dev/null; do

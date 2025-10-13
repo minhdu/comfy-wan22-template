@@ -81,6 +81,14 @@ RUN for repo in \
     https://github.com/BadCafeCode/masquerade-nodes-comfyui.git \
     https://github.com/1038lab/ComfyUI-RMBG.git \
     https://github.com/M1kep/ComfyLiterals.git; \
+    https://github.com/Smirnov75/ComfyUI-mxToolkit.git \
+    https://github.com/city96/ComfyUI-GGUF.git \
+    https://github.com/pollockjj/ComfyUI-MultiGPU.git \
+    https://github.com/crystian/ComfyUI-Crystools.git \
+    https://github.com/mirabarukaso/ComfyUI_Mira.git \
+    https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git \
+    https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader.git \
+    https://github.com/MoonGoblinDev/Civicomfy.git \
     do \
         cd /ComfyUI/custom_nodes; \
         repo_dir=$(basename "$repo" .git); \
