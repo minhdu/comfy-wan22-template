@@ -5,13 +5,16 @@ jobs:
   build:
     docker:
       - image: cimg/base:stable
+    environment:
+      DOCKER_BUILDKIT: 1
+      BUILDKIT_PROGRESS: plain
     steps:
       - checkout
       - setup_remote_docker:
           version: 20.10.24
       - run:
           name: Build Docker image
-          command: docker build -t comfy-wan22-template:latest .
+          command: docker build --progress=plain -t comfy-wan22-template:latest .
       - run:
           name: Push to Docker Hub
           command: |
