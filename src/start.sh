@@ -320,7 +320,7 @@ while pgrep -x "aria2c" > /dev/null; do
 done
 
 
-echo "✅ All models downloaded successfully!
+echo "✅ All models downloaded successfully!"
 
 # ========== 🔻🔻🔻 NEW: EXTRA MODELS (user-specified) 🔻🔻🔻
 echo ""
@@ -361,8 +361,7 @@ while pgrep -x "aria2c" > /dev/null; do
     sleep 5
 done
 echo "✅ Extra models: done"
-# ========== 🔺🔺🔺 END EXTRA MODELS 🔺🔺🔺
-"
+# ========== 🔺🔺🔺 END EXTRA MODELS 🔺🔺🔺"
 
 # poll every 5 s until the PID is gone
   while kill -0 "$BUILD_PID" 2>/dev/null; do
