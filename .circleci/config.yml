@@ -1,47 +1,26 @@
 # .circleci/config.yml  (CircleCI 2.1)
 version: 2.1
 
-executors:
-  docker-dind:
-    # machine executor gives you full Docker daemon + BuildKit
-    machine:
-      image: ubuntu-2404:current
-      docker_layer_caching: false
-    environment:
-      DOCKER_BUILDKIT: 1
-      COMPOSE_DOCKER_CLI_BUILD: 1
-
 jobs:
-  build_and_push:
-    executor: docker-dind
+  build:
+    docker:
+      - image: cimg/base:stable
     steps:
       - checkout
-
+      - setup_remote_docker:
+          version: 20.10.24
       - run:
-          name: Log in to Docker Hub
-          command: |
-            echo "$DOCKERHUB_PAT" | docker login -u "$DOCKERHUB_USER" --password-stdin
-
+          name: Build Docker image
+          command: docker build -t comfy-wan22-template:latest .
       - run:
-          name: Build & push without cache
+          name: Push to Docker Hub
           command: |
-            TAG="${CIRCLE_TAG:-latest}"
-            IMG="docker.io/$DOCKERHUB_USER/comfy-wan22-template"
-
-            docker build \
-              --progress=plain \
-              -t "${IMG}:${TAG}" .
-
-            docker push "${IMG}:${TAG}"
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker tag comfy-wan22-template:latest "$DOCKERHUB_USERNAME"/comfy-wan22-template:latest
+            docker push "$DOCKERHUB_USERNAME"/comfy-wan22-template:latest
 
 workflows:
   version: 2
-  build_on_tag:
+  build_and_push:
     jobs:
-      - build_and_push:
-          context: docker-hub
-          filters:
-            tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/   # run on tags like v5 or v1.2.3
-            branches:
-              ignore: /.*/
+      - build
