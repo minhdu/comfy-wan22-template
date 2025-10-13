@@ -15,8 +15,8 @@ jobs:
       - run:
           name: Push to Docker Hub
           command: |
-            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker tag comfy-wan22-template:latest "$DOCKERHUB_USERNAME"/comfy-wan22-template:latest
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+            docker tag comfy-wan22-template:latest "$DOCKERHUB_USER"/comfy-wan22-template:latest
             docker push "$DOCKERHUB_USERNAME"/comfy-wan22-template:latest
 
 workflows:
