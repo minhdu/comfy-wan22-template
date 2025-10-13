@@ -334,26 +334,32 @@ UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
 EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
 mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
 
+set -x
+
+# Bảo đảm token được truyền
+export civitai_token="${civitai_token:-${CIVITAI_TOKEN:-}}"
+
 # GGUF → models/unet
-./download_with_aria.py -m 2060943 -o "$UNET_DIR"
-./download_with_aria.py -m 2060527 -o "$UNET_DIR"
+/usr/local/bin/download_with_aria.py -m 2060943 -o "$UNET_DIR"
+/usr/local/bin/download_with_aria.py -m 2060527 -o "$UNET_DIR"
 
 # LoRA → models/loras
-./download_with_aria.py -m 1900322 -o "$LORAS_DIR"
-./download_with_aria.py -m 2083303 -o "$LORAS_DIR"
-./download_with_aria.py -m 2073605 -o "$LORAS_DIR"
-./download_with_aria.py -m 1873831 -o "$LORAS_DIR"
+/usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR"
+/usr/local/bin/download_with_aria.py -m 2083303 -o "$LORAS_DIR"
+/usr/local/bin/download_with_aria.py -m 2073605 -o "$LORAS_DIR"
+/usr/local/bin/download_with_aria.py -m 1873831 -o "$LORAS_DIR"
 
 # VAE → models/vae
-./download_with_aria.py -m 1191929 -o "$VAE_DIR"
+/usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR"
 
 # Upscaler (Remacri) → models/upscale_models
-./download_with_aria.py -m 164821 -o "$UPSCALE_DIR"
+/usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR"
 
 # Embeddings → models/embeddings
-./download_with_aria.py -m 1550840 -o "$EMB_DIR"
-./download_with_aria.py -m 1558647 -o "$EMB_DIR"
-./download_with_aria.py -m 1860747 -o "$EMB_DIR"
+/usr/local/bin/download_with_aria.py -m 1550840 -o "$EMB_DIR"
+/usr/local/bin/download_with_aria.py -m 1558647 -o "$EMB_DIR"
+/usr/local/bin/download_with_aria.py -m 1860747 -o "$EMB_DIR"
+set +x
 
 # Wait for any extra aria2 jobs (HF direct)
 while pgrep -x "aria2c" > /dev/null; do
