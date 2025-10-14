@@ -336,60 +336,155 @@ echo "✅ All models downloaded successfully!"
 
 echo "All downloads completed!"
 
-# ========== 📻📻📻 NEW: EXTRA MODELS (user-specified) 📻📻📻
+# ========== EXTRA MODELS - PRIORITIZED & SEQUENTIAL ==========
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔥 EXTRA MODELS • $(date)"
+echo "🔥 EXTRA MODELS (PRIORITIZED) • $(date)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Ensure destination folders
+# Ensure directories
 UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
 UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
 EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
 mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR" "$EMB_DIR"
 
-echo "Checking download script..."
-if [ -f "/usr/local/bin/download_with_aria.py" ]; then
-    echo "✅ download_with_aria.py found"
-    
-    # GGUF → models/unet
-    echo "📦 Downloading GGUF models to $UNET_DIR"
-    (cd "$UNET_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2060943) &
-    (cd "$UNET_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2060527) &
+echo "Created directories:"
+echo "  ✅ $UNET_DIR"
+echo "  ✅ $LORAS_DIR"
+echo "  ✅ $VAE_DIR"
+echo "  ✅ $UPSCALE_DIR"
+echo "  ✅ $EMB_DIR"
 
-    # LoRA → models/loras
-    echo "📦 Downloading LoRA models to $LORAS_DIR"
-    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1900322) &
-    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2083303) &
-    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 2073605) &
-    (cd "$LORAS_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1873831) &
-
-    # VAE → models/vae
-    echo "📦 Downloading VAE to $VAE_DIR"
-    (cd "$VAE_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1191929) &
-
-    # Upscaler → models/upscale_models
-    echo "📦 Downloading Upscaler to $UPSCALE_DIR"
-    (cd "$UPSCALE_DIR" && python3 /usr/local/bin/download_with_aria.py -m 164821) &
-
-    # Embeddings → models/embeddings
-    echo "📦 Downloading Embeddings to $EMB_DIR"
-    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1550840) &
-    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1558647) &
-    (cd "$EMB_DIR" && python3 /usr/local/bin/download_with_aria.py -m 1860747) &
-
-    # Wait for extra downloads
-    echo "⏳ Waiting for extra model downloads..."
-    while pgrep -x "aria2c" > /dev/null; do
-        echo "📽 Extra model downloads still in progress..."
-        sleep 5
-    done
-    echo "✅ Extra models download complete"
+# Get API token from environment variable
+if [ -z "$civitai_token" ]; then
+    echo "⚠️  Warning: civitai_token environment variable not set"
+    echo "   Please set it in RunPod environment variables"
+    echo "   Skipping GGUF downloads..."
+    SKIP_GGUF=true
 else
-    echo "❌ ERROR: download_with_aria.py not found at /usr/local/bin/"
-    ls -la /usr/local/bin/ | grep download
+    echo "✅ CivitAI token found"
+    CIVITAI_TOKEN="$civitai_token"
+    SKIP_GGUF=false
 fi
-# ========== 📺📺📺 END EXTRA MODELS 📺📺📺
+
+# Function to download from CivitAI directly
+download_civitai() {
+    local model_id="$1"
+    local output_dir="$2"
+    local description="$3"
+    
+    echo "📦 Downloading $description (ID: $model_id) to $output_dir"
+    
+    local url="https://civitai.com/api/download/models/${model_id}?token=${CIVITAI_TOKEN}"
+    
+    aria2c \
+        --max-connection-per-server=4 \
+        --split=4 \
+        --min-split-size=1M \
+        --continue=true \
+        --auto-file-renaming=false \
+        --allow-overwrite=true \
+        --console-log-level=warn \
+        --summary-interval=30 \
+        --dir="$output_dir" \
+        "$url"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Downloaded $description"
+        return 0
+    else
+        echo "❌ Failed to download $description"
+        return 1
+    fi
+}
+
+# ============================================================
+# PRIORITY 1: GGUF Models (download synchronously, one by one)
+# ============================================================
+if [ "$SKIP_GGUF" = false ]; then
+    echo ""
+    echo "🎯 PRIORITY 1: GGUF Models"
+    echo "----------------------------------------"
+
+    download_civitai 2060943 "$UNET_DIR" "GGUF Model 1 (2060943)"
+    download_civitai 2060527 "$UNET_DIR" "GGUF Model 2 (2060527)"
+
+    echo "✅ GGUF models download complete"
+    ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
+else
+    echo "⏭️  Skipping GGUF downloads (no token)"
+fi
+
+# ============================================================
+# PRIORITY 2: LoRA & VAE (download in parallel, small batch)
+# ============================================================
+echo ""
+echo "🎯 PRIORITY 2: LoRA & VAE Models"
+echo "----------------------------------------"
+
+python3 /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" &
+python3 /usr/local/bin/download_with_aria.py -m 2083303 -o "$LORAS_DIR" &
+python3 /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" &
+
+echo "⏳ Waiting for LoRA & VAE batch 1..."
+wait
+
+python3 /usr/local/bin/download_with_aria.py -m 2073605 -o "$LORAS_DIR" &
+python3 /usr/local/bin/download_with_aria.py -m 1873831 -o "$LORAS_DIR" &
+
+echo "⏳ Waiting for LoRA batch 2..."
+wait
+
+echo "✅ LoRA & VAE models complete"
+
+# ============================================================
+# PRIORITY 3: Upscaler & Embeddings (parallel)
+# ============================================================
+echo ""
+echo "🎯 PRIORITY 3: Upscaler & Embeddings"
+echo "----------------------------------------"
+
+python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" &
+python3 /usr/local/bin/download_with_aria.py -m 1550840 -o "$EMB_DIR" &
+python3 /usr/local/bin/download_with_aria.py -m 1558647 -o "$EMB_DIR" &
+
+echo "⏳ Waiting for Upscaler & Embeddings batch 1..."
+wait
+
+python3 /usr/local/bin/download_with_aria.py -m 1860747 -o "$EMB_DIR" &
+
+echo "⏳ Waiting for Embeddings batch 2..."
+wait
+
+echo "✅ Upscaler & Embeddings complete"
+
+# ============================================================
+# FINAL CHECK
+# ============================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📋 DOWNLOAD SUMMARY"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo "UNET Models:"
+ls -lh "$UNET_DIR/" 2>/dev/null | tail -n +2 || echo "  (empty)"
+
+echo ""
+echo "LoRA Models (showing first 5):"
+ls -lh "$LORAS_DIR/" 2>/dev/null | tail -n +2 | head -5 || echo "  (empty)"
+
+echo ""
+echo "VAE Models:"
+ls -lh "$VAE_DIR/" 2>/dev/null | tail -n +2 | head -3 || echo "  (empty)"
+
+echo ""
+echo "Embeddings:"
+ls -lh "$EMB_DIR/" 2>/dev/null | tail -n +2 || echo "  (empty)"
+
+echo ""
+echo "✅ All extra models downloaded • $(date)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# ========== END EXTRA MODELS ==========
 
 echo "Downloading upscale models"
 mkdir -p "$NETWORK_VOLUME/ComfyUI/models/upscale_models"
