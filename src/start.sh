@@ -422,18 +422,72 @@ echo ""
 echo "🎯 PRIORITY 2: LoRA & VAE Models"
 echo "----------------------------------------"
 
-python3 /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" &
-python3 /usr/local/bin/download_with_aria.py -m 2083303 -o "$LORAS_DIR" &
-python3 /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" &
+echo "Starting LoRA & VAE batch 1..."
+python3 /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
+PID1=$!
+python3 /usr/local/bin/download_with_aria.py -m 2083303 -o "$LORAS_DIR" 2>&1 &
+PID2=$!
+python3 /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
+PID3=$!
 
-echo "⏳ Waiting for LoRA & VAE batch 1..."
-wait
+echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
+echo "⏳ Waiting for LoRA & VAE batch 1 (max 10 minutes)..."
 
-python3 /usr/local/bin/download_with_aria.py -m 2073605 -o "$LORAS_DIR" &
-python3 /usr/local/bin/download_with_aria.py -m 1873831 -o "$LORAS_DIR" &
+# Wait with timeout
+WAIT_COUNT=0
+MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
 
-echo "⏳ Waiting for LoRA batch 2..."
-wait
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Check if all processes are done
+    RUNNING=0
+    kill -0 $PID1 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID2 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID3 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 1 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 1, killing stuck processes..."
+    kill $PID1 $PID2 $PID3 2>/dev/null
+fi
+
+echo "Starting LoRA batch 2..."
+python3 /usr/local/bin/download_with_aria.py -m 2073605 -o "$LORAS_DIR" 2>&1 &
+PID4=$!
+python3 /usr/local/bin/download_with_aria.py -m 1873831 -o "$LORAS_DIR" 2>&1 &
+PID5=$!
+
+echo "Batch 2 PIDs: $PID4, $PID5"
+echo "⏳ Waiting for LoRA batch 2 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID4 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID5 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 2, killing stuck processes..."
+    kill $PID4 $PID5 2>/dev/null
+fi
 
 echo "✅ LoRA & VAE models complete"
 
@@ -444,17 +498,62 @@ echo ""
 echo "🎯 PRIORITY 3: Upscaler & Embeddings"
 echo "----------------------------------------"
 
-python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" &
-python3 /usr/local/bin/download_with_aria.py -m 1550840 -o "$EMB_DIR" &
-python3 /usr/local/bin/download_with_aria.py -m 1558647 -o "$EMB_DIR" &
+echo "Starting Upscaler & Embeddings batch 1..."
+python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
+PID6=$!
+python3 /usr/local/bin/download_with_aria.py -m 1550840 -o "$EMB_DIR" 2>&1 &
+PID7=$!
+python3 /usr/local/bin/download_with_aria.py -m 1558647 -o "$EMB_DIR" 2>&1 &
+PID8=$!
 
-echo "⏳ Waiting for Upscaler & Embeddings batch 1..."
-wait
+echo "Batch 1 PIDs: $PID6, $PID7, $PID8"
+echo "⏳ Waiting for Upscaler & Embeddings batch 1 (max 10 minutes)..."
 
-python3 /usr/local/bin/download_with_aria.py -m 1860747 -o "$EMB_DIR" &
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID6 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID7 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID8 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 1 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
 
-echo "⏳ Waiting for Embeddings batch 2..."
-wait
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached, killing stuck processes..."
+    kill $PID6 $PID7 $PID8 2>/dev/null
+fi
+
+echo "Starting Embeddings batch 2..."
+python3 /usr/local/bin/download_with_aria.py -m 1860747 -o "$EMB_DIR" 2>&1 &
+PID9=$!
+
+echo "Batch 2 PID: $PID9"
+echo "⏳ Waiting for Embeddings batch 2 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    if ! kill -0 $PID9 2>/dev/null; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... (${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached, killing stuck process..."
+    kill $PID9 2>/dev/null
+fi
 
 echo "✅ Upscaler & Embeddings complete"
 
