@@ -1,3 +1,3 @@
-git clone https://github.com/Hearmeman24/comfyui-wan.git
-mv comfyui-wan/src/start.sh /
+git clone https://github.com/minhdu/comfy-wan22-template.git
+mv comfy-wan22-template/src/start.sh /
 bash /start.sh
