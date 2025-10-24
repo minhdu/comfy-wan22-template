@@ -1,0 +1,753 @@
+{
+  "id": "44fd895c-29e9-4156-9ba6-714c2b49015e",
+  "revision": 0,
+  "last_node_id": 39,
+  "last_link_id": 54,
+  "nodes": [
+    {
+      "id": 5,
+      "type": "EmptyLatentImage",
+      "pos": [
+        860,
+        440
+      ],
+      "size": [
+        220,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "EmptyLatentImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 11,
+      "type": "Note",
+      "pos": [
+        80,
+        -200
+      ],
+      "size": [
+        282.48541259765625,
+        197.0584259033203
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "BASIC SDXL WORKFLOW WITH BASE MODEL ONLY\n========================================\n\nThis basic workflow only uses the BASE SDXL model. This can be useful for systems with limited resources as the REFINER takes another 6GB or ram.\n\nIf you use the embedded VAE be sure to download the \"0.9vae\" version because the 1.0 vae is considered defective."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 29,
+      "type": "Note",
+      "pos": [
+        620,
+        440
+      ],
+      "size": [
+        210,
+        477.3874816894531
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "SUPPORTED RESOLUTIONS\n=====================\n\nratio  resolution\n-----------------\n0.5:   704×1408\n0.52:  704×1344\n0.57:  768×1344\n0.6:   768×1280\n0.68:  832×1216\n0.72:  832×1152\n0.78:  896×1152\n0.82:  896×1088\n0.88:  960×1088\n0.94:  960×1024\n1.0:  1024×1024\n1.07:  1024×960\n1.13:  1088×960\n1.21:  1088×896\n1.29:  1152×896\n1.38:  1152×832\n1.46:  1216×832\n1.67:  1280×768\n1.75:  1344×768\n1.91:  1344×704\n2.0:   1408×704\n2.09:  1472×704\n2.4:   1536×640\n2.5:   1600×640\n2.89:  1664×576\n3.0:   1728×576"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [
+        1540,
+        40
+      ],
+      "size": [
+        140,
+        60
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 42
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 43
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            41
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "VAEDecode",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 34,
+      "type": "Note",
+      "pos": [
+        870,
+        -300
+      ],
+      "size": [
+        210,
+        130
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "WIDTH/HEIGHT and TARGET_WIDTH/HEIGHT are both 4 times the latent size.\n\nThis generally grants a higher definition image."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 35,
+      "type": "Note",
+      "pos": [
+        464,
+        -235
+      ],
+      "size": [
+        330.7162780761719,
+        95.14419555664062
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": "",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "Note that we send the same prompt to both TEXT_G and TEXT_L, you can experiment with different prompts but using the same seems to lead to more predictable results."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 30,
+      "type": "CLIPTextEncodeSDXL",
+      "pos": [
+        860,
+        -120
+      ],
+      "size": [
+        220,
+        286
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 49
+        },
+        {
+          "name": "text_g",
+          "type": "STRING",
+          "widget": {
+            "name": "text_g"
+          },
+          "link": 45
+        },
+        {
+          "name": "text_l",
+          "type": "STRING",
+          "widget": {
+            "name": "text_l"
+          },
+          "link": 46
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            52
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "CLIPTextEncodeSDXL",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        0,
+        0,
+        1024,
+        1024,
+        "safe_pos, high res image, masterpiece, female, large breasts, nipples, 1girl, cleavage, covered erect nipples, drooling, heart, heart in eye, large breasts, looking at viewer, medium hair, naked shirt, nipples, open mouth, penis, pink eyes, pink hair, saliva, shirt, ((black thighhighs, lace thighhighs, lace-trimmed thighhighs, black lace thighhighs)), red nails, black detached sleeves, black lace detached sleeves, lace sleeves, lace-trimmed detached sleeves, nude, ((feet focus)), wide open eyes, ahegao, pussy focus, perfection, (wet skin:1.5), indoors, apartment, bedroom, night, cresent moon, 1boy, musscular, (saliva:1.4), drooling, vaginal penetration, detailed asshole, round ass, on bed, (ass grab), blush, dynamic angle",
+        "safe_pos, high res image, masterpiece, female, large breasts, nipples, 1girl, cleavage, covered erect nipples, drooling, heart, heart in eye, large breasts, looking at viewer, medium hair, naked shirt, nipples, open mouth, penis, pink eyes, pink hair, saliva, shirt, ((black thighhighs, lace thighhighs, lace-trimmed thighhighs, black lace thighhighs)), red nails, black detached sleeves, black lace detached sleeves, lace sleeves, lace-trimmed detached sleeves, nude, ((feet focus)), wide open eyes, ahegao, pussy focus, perfection, (wet skin:1.5), indoors, apartment, bedroom, night, cresent moon, 1boy, musscular, (saliva:1.4), drooling, vaginal penetration, detailed asshole, round ass, on bed, (ass grab), blush, dynamic angle"
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 33,
+      "type": "CLIPTextEncodeSDXL",
+      "pos": [
+        860,
+        160
+      ],
+      "size": [
+        220,
+        286
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 50
+        },
+        {
+          "name": "text_g",
+          "type": "STRING",
+          "widget": {
+            "name": "text_g"
+          },
+          "link": 47
+        },
+        {
+          "name": "text_l",
+          "type": "STRING",
+          "widget": {
+            "name": "text_l"
+          },
+          "link": 48
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            51
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "CLIPTextEncodeSDXL",
+        "widget_ue_connectable": {
+          "text_g": true,
+          "text_l": true
+        }
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        0,
+        0,
+        1024,
+        1024,
+        "safe_neg, censored, 3d, deformed, ugly, bad anatomy, monochrome, blurry, messy, watermark, text, low quality, extra fingers, signature, bad proportions, bad anatomy, artifacts, compression artifacts, sketch, distorted, distracted, unicorn horn, extra legs, bad fingers, low-resolution, distortion, pixelated, overexposed, high-contrast, bad-contrast, deformed fingers, grainy, duplicate, pattern,(bad hand), bad quality, simple background, artist logo, patreon logo, logo, comic, multiple views, multiple panels, monochrome, sketch, cum bath, ng_deepnegative_v1_75t, negative_hand, vaginal sex, easynegative",
+        "safe_neg, censored, 3d, deformed, ugly, bad anatomy, monochrome, blurry, messy, watermark, text, low quality, extra fingers, signature, bad proportions, bad anatomy, artifacts, compression artifacts, sketch, distorted, distracted, unicorn horn, extra legs, bad fingers, low-resolution, distortion, pixelated, overexposed, high-contrast, bad-contrast, deformed fingers, grainy, duplicate, pattern,(bad hand), bad quality, simple background, artist logo, patreon logo, logo, comic, multiple views, multiple panels, monochrome, sketch, cum bath, ng_deepnegative_v1_75t, negative_hand, vaginal sex, easynegative"
+      ],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 4,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        -27,
+        62
+      ],
+      "size": [
+        398.7421875,
+        98
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            20
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "slot_index": 1,
+          "links": [
+            49,
+            50
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 2,
+          "links": [
+            43
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "CheckpointLoaderSimple",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "waiNSFWIllustrious_v90.safetensors"
+      ],
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 32,
+      "type": "PrimitiveNode",
+      "pos": [
+        460,
+        180
+      ],
+      "size": [
+        338.24078369140625,
+        179.58128356933594
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "widget": {
+            "name": "text_g"
+          },
+          "slot_index": 0,
+          "links": [
+            47,
+            48
+          ]
+        }
+      ],
+      "title": "negative",
+      "properties": {
+        "Run widget replace on values": false,
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "safe_neg, censored, 3d, deformed, ugly, bad anatomy, monochrome, blurry, messy, watermark, text, low quality, extra fingers, signature, bad proportions, bad anatomy, artifacts, compression artifacts, sketch, distorted, distracted, unicorn horn, extra legs, bad fingers, low-resolution, distortion, pixelated, overexposed, high-contrast, bad-contrast, deformed fingers, grainy, duplicate, pattern,(bad hand), bad quality, simple background, artist logo, patreon logo, logo, comic, multiple views, multiple panels, monochrome, sketch, cum bath, ng_deepnegative_v1_75t, negative_hand, vaginal sex, easynegative"
+      ],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 28,
+      "type": "SaveImage",
+      "pos": [
+        1730,
+        50
+      ],
+      "size": [
+        688.129150390625,
+        728.7603759765625
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 41
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "SaveImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 31,
+      "type": "PrimitiveNode",
+      "pos": [
+        460,
+        -90
+      ],
+      "size": [
+        338.24078369140625,
+        179.58128356933594
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "widget": {
+            "name": "text_g"
+          },
+          "slot_index": 0,
+          "links": [
+            45,
+            46
+          ]
+        }
+      ],
+      "title": "positive",
+      "properties": {
+        "Run widget replace on values": false,
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "safe_pos, high res image, masterpiece, female, large breasts, nipples, 1girl, cleavage, covered erect nipples, drooling, heart, heart in eye, large breasts, looking at viewer, medium hair, naked shirt, nipples, open mouth, penis, pink eyes, pink hair, saliva, shirt, ((black thighhighs, lace thighhighs, lace-trimmed thighhighs, black lace thighhighs)), red nails, black detached sleeves, black lace detached sleeves, lace sleeves, lace-trimmed detached sleeves, nude, ((feet focus)), wide open eyes, ahegao, pussy focus, perfection, (wet skin:1.5), indoors, apartment, bedroom, night, cresent moon, 1boy, musscular, (saliva:1.4), drooling, vaginal penetration, detailed asshole, round ass, on bed, (ass grab), blush, dynamic angle"
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 3,
+      "type": "KSampler",
+      "pos": [
+        1190,
+        30
+      ],
+      "size": [
+        300,
+        556
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 20
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 52
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 51
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 2
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 54
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            42
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.39",
+        "Node name for S&R": "KSampler",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        336093809270746,
+        "fixed",
+        20,
+        7.5,
+        "euler_ancestral",
+        "karras",
+        1
+      ],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 39,
+      "type": "Seed",
+      "pos": [
+        1227.51513671875,
+        -226.12718200683594
+      ],
+      "size": [
+        270,
+        142
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "SEED",
+          "links": null
+        },
+        {
+          "name": "number",
+          "type": "NUMBER",
+          "links": null
+        },
+        {
+          "name": "float",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "int",
+          "type": "INT",
+          "links": [
+            54
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "was-node-suite-comfyui",
+        "ver": "1cd8d304eda256c412b8589ce1f00be3c61cf9ec",
+        "Node name for S&R": "Seed",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        307263501006490,
+        "randomize"
+      ]
+    }
+  ],
+  "links": [
+    [
+      2,
+      5,
+      0,
+      3,
+      3,
+      "LATENT"
+    ],
+    [
+      20,
+      4,
+      0,
+      3,
+      0,
+      "MODEL"
+    ],
+    [
+      41,
+      8,
+      0,
+      28,
+      0,
+      "IMAGE"
+    ],
+    [
+      42,
+      3,
+      0,
+      8,
+      0,
+      "LATENT"
+    ],
+    [
+      43,
+      4,
+      2,
+      8,
+      1,
+      "VAE"
+    ],
+    [
+      45,
+      31,
+      0,
+      30,
+      1,
+      "STRING"
+    ],
+    [
+      46,
+      31,
+      0,
+      30,
+      2,
+      "STRING"
+    ],
+    [
+      47,
+      32,
+      0,
+      33,
+      1,
+      "STRING"
+    ],
+    [
+      48,
+      32,
+      0,
+      33,
+      2,
+      "STRING"
+    ],
+    [
+      49,
+      4,
+      1,
+      30,
+      0,
+      "CLIP"
+    ],
+    [
+      50,
+      4,
+      1,
+      33,
+      0,
+      "CLIP"
+    ],
+    [
+      51,
+      33,
+      0,
+      3,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      52,
+      30,
+      0,
+      3,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      54,
+      39,
+      3,
+      3,
+      4,
+      "INT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "ds": {
+      "scale": 0.9090909090909091,
+      "offset": [
+        -335.3460511262348,
+        346.90632937039464
+      ]
+    },
+    "frontendVersion": "1.20.7",
+    "VHS_latentpreview": true,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
