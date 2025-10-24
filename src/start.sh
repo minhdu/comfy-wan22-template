@@ -77,7 +77,6 @@ else
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes
     git pull
 fi
-
 echo "🔧 Installing KJNodes packages..."
 pip install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
 KJ_PID=$!
@@ -85,7 +84,6 @@ KJ_PID=$!
 echo "🔧 Installing WanVideoWrapper packages..."
 pip install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
 WAN_PID=$!
-
 export change_preview_method="true"
 echo "Building SageAttention in the background"
 (
@@ -98,7 +96,6 @@ echo "Building SageAttention in the background"
 
 BUILD_PID=$!
 echo "Background build started (PID: $BUILD_PID)"
-
 
 # Change to the directory
 cd "$CUSTOM_NODES_DIR" || exit 1
@@ -151,6 +148,7 @@ LORAS_DIR="$NETWORK_VOLUME/ComfyUI/models/loras"
 UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
 UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
 mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR"
+# Download 480p native models
 
 # Handle full download (with SDXL)
 if [ "$download_wan_fun_and_sdxl_helper" == "true" ]; then
@@ -165,6 +163,16 @@ if [ "$download_wan_fun_and_sdxl_helper" == "true" ]; then
   fi
 fi
 
+# Download 720p native models
+
+# Download Wan Animate model
+
+echo "Downloading optimization loras"
+download_model "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan21_CausVid_14B_T2V_lora_rank32.safetensors" "$LORAS_DIR/Wan21_CausVid_14B_T2V_lora_rank32.safetensors"
+download_model "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan21_T2V_14B_lightx2v_cfg_step_distill_lora_rank32.safetensors" "$LORAS_DIR/Wan21_T2V_14B_lightx2v_cfg_step_distill_lora_rank32.safetensors"
+download_model "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_animate_14B_relight_lora_bf16.safetensors" "$LORAS_DIR/wan2.2_animate_14B_relight_lora_bf16.safetensors"
+download_model "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors" "$LORAS_DIR/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
+download_model "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" "$LORAS_DIR/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
 
 # Download text encoders
 echo "Downloading text encoders..."
@@ -229,7 +237,6 @@ while pgrep -x "aria2c" > /dev/null; do
     sleep 5  # Check every 5 seconds
 done
 
-
 echo "✅ All models downloaded successfully!"
 
 # poll every 5 s until the PID is gone
@@ -252,12 +259,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 UNET_DIR="$NETWORK_VOLUME/ComfyUI/models/unet"
 UPSCALE_DIR="$NETWORK_VOLUME/ComfyUI/models/upscale_models"
 mkdir -p "$UNET_DIR" "$LORAS_DIR" "$VAE_DIR" "$UPSCALE_DIR"
-
 echo "Created directories:"
 echo "  ✅ $UNET_DIR"
 echo "  ✅ $LORAS_DIR"
 echo "  ✅ $VAE_DIR"
 echo "  ✅ $UPSCALE_DIR"
+echo "  ✅ $EMB_DIR"
 
 # Get API token from environment variable
 if [ -z "$civitai_token" ]; then
@@ -326,23 +333,97 @@ echo ""
 echo "🎯 PRIORITY 2: LoRA & VAE Models"
 echo "----------------------------------------"
 
-echo "Starting LoRA & VAE downloads..."
+echo "Starting LoRA & VAE batch 1..."
 python3 /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
-PID_LORA=$!
+PID1=$!
+PID2=$!
 python3 /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
-PID_VAE=$!
+PID3=$!
 
-echo "⏳ Waiting for LoRA & VAE (max 10 minutes)..."
+echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
+echo "⏳ Waiting for LoRA & VAE batch 1 (max 10 minutes)..."
+
+# Wait with timeout
 WAIT_COUNT=0
 MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
 
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Check if all processes are done
     RUNNING=0
-    kill -0 $PID_LORA 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID_VAE 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID1 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID2 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID3 2>/dev/null && RUNNING=$((RUNNING + 1))
     
     if [ $RUNNING -eq 0 ]; then
-        echo "✅ LoRA & VAE downloads complete"
+        echo "✅ Batch 1 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 1, killing stuck processes..."
+    kill $PID1 $PID2 $PID3 2>/dev/null
+fi
+
+echo "Starting LoRA batch 2..."
+PID4=$!
+PID5=$!
+
+echo "Batch 2 PIDs: $PID4, $PID5"
+echo "⏳ Waiting for LoRA batch 2 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID4 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID5 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 2, killing stuck processes..."
+    kill $PID4 $PID5 2>/dev/null
+fi
+
+echo "✅ LoRA & VAE models complete"
+
+# ============================================================
+# PRIORITY 3: Upscaler & Embeddings (parallel)
+# ============================================================
+echo ""
+echo "🎯 PRIORITY 3: Upscaler & Embeddings"
+echo "----------------------------------------"
+
+echo "Starting Upscaler & Embeddings batch 1..."
+python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
+PID6=$!
+PID7=$!
+PID8=$!
+
+echo "Batch 1 PIDs: $PID6, $PID7, $PID8"
+echo "⏳ Waiting for Upscaler & Embeddings batch 1 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID6 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID7 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID8 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 1 complete"
         break
     fi
     
@@ -353,20 +434,33 @@ done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
     echo "⚠️  Timeout reached, killing stuck processes..."
-    kill $PID_LORA $PID_VAE 2>/dev/null
+    kill $PID6 $PID7 $PID8 2>/dev/null
 fi
 
-echo "✅ LoRA & VAE models complete"
+echo "Starting Embeddings batch 2..."
+PID9=$!
 
-# ============================================================
-# PRIORITY 3: Upscaler
-# ============================================================
-echo ""
-echo "🎯 PRIORITY 3: Upscaler"
-echo "----------------------------------------"
+echo "Batch 2 PID: $PID9"
+echo "⏳ Waiting for Embeddings batch 2 (max 10 minutes)..."
 
-echo "Starting Upscaler download..."
-python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    if ! kill -0 $PID9 2>/dev/null; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... (${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached, killing stuck process..."
+    kill $PID9 2>/dev/null
+fi
+
+echo "✅ Upscaler & Embeddings complete"
 
 # ============================================================
 # FINAL CHECK
@@ -388,6 +482,10 @@ echo "VAE Models:"
 ls -lh "$VAE_DIR/" 2>/dev/null | tail -n +2 | head -3 || echo "  (empty)"
 
 echo ""
+echo "Embeddings:"
+ls -lh "$EMB_DIR/" 2>/dev/null | tail -n +2 || echo "  (empty)"
+
+echo ""
 echo "✅ All extra models downloaded • $(date)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 # ========== END EXTRA MODELS ==========
@@ -405,8 +503,47 @@ else
     echo "4xLSDIR.pth already exists. Skipping."
 fi
 
-echo "Finished downloading models!"
+echo "Handling embeddings files (lazyhand/lazympos/lazyneg)"
+EMB_DIR="$NETWORK_VOLUME/ComfyUI/models/embeddings"
+mkdir -p "$EMB_DIR"
 
+# Move lazyhand.safetensors if present at root
+if [ ! -f "$EMB_DIR/lazyhand.safetensors" ]; then
+    if [ -f "/lazyhand.safetensors" ]; then
+        mv "/lazyhand.safetensors" "$EMB_DIR/lazyhand.safetensors"
+        echo "Moved lazyhand.safetensors to $EMB_DIR"
+    else
+        echo "lazyhand.safetensors not found in the root directory."
+    fi
+else
+    echo "lazyhand.safetensors already exists in $EMB_DIR. Skipping."
+fi
+
+# Move lazympos.safetensors if present at root
+if [ ! -f "$EMB_DIR/lazympos.safetensors" ]; then
+    if [ -f "/lazympos.safetensors" ]; then
+        mv "/lazympos.safetensors" "$EMB_DIR/lazympos.safetensors"
+        echo "Moved lazympos.safetensors to $EMB_DIR"
+    else
+        echo "lazympos.safetensors not found in the root directory."
+    fi
+else
+    echo "lazympos.safetensors already exists in $EMB_DIR. Skipping."
+fi
+
+# Move lazyneg.safetensors if present at root
+if [ ! -f "$EMB_DIR/lazyneg.safetensors" ]; then
+    if [ -f "/lazyneg.safetensors" ]; then
+        mv "/lazyneg.safetensors" "$EMB_DIR/lazyneg.safetensors"
+        echo "Moved lazyneg.safetensors to $EMB_DIR"
+    else
+        echo "lazyneg.safetensors not found in the root directory."
+    fi
+else
+    echo "lazyneg.safetensors already exists in $EMB_DIR. Skipping."
+fi
+
+echo "Finished downloading models!"
 
 echo "Checking and copying workflow..."
 mkdir -p "$WORKFLOW_DIR"
@@ -486,17 +623,14 @@ fi
 # Workspace as main working directory
 echo "cd $NETWORK_VOLUME" >> ~/.bashrc
 
-
 # Install dependencies
 wait $KJ_PID
   KJ_STATUS=$?
 
 wait $WAN_PID
 WAN_STATUS=$?
-
 echo "✅ KJNodes install complete"
 echo "✅ WanVideoWrapper install complete"
-
 # Check results
 if [ $KJ_STATUS -ne 0 ]; then
   echo "❌ KJNodes install failed."
@@ -507,7 +641,6 @@ if [ $WAN_STATUS -ne 0 ]; then
   echo "❌ WanVideoWrapper install failed."
   exit 1
 fi
-
 echo "Renaming loras downloaded as zip files to safetensors files"
 cd $LORAS_DIR
 for file in *.zip; do
