@@ -1,3 +1,7 @@
-git clone https://github.com/minhdu/comfy-wan22-template.git
-mv comfy-wan22-template/src/start.sh /
-bash /start.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+# IMPORTANT: keep the runtime reproducible.
+# Do NOT `git clone` a template repo during container startup.
+# If you need template updates, rebuild the image (CircleCI will do it).
+exec bash /start.sh
