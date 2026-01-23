@@ -33,19 +33,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Core Python tooling
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install packaging setuptools wheel
-# ------------------------------------------------------------
-# TensorRT runtime for ComfyUI-Upscaler-Tensorrt (pinned)
-# + remove CUDA stub libcuda to prevent wrong library being picked
-# ------------------------------------------------------------
-RUN rm -f /usr/local/cuda/lib64/stubs/libcuda.so* || true && ldconfig
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --extra-index-url https://pypi.nvidia.com \
-      tensorrt-cu12==10.13.3.9.post1 \
-      tensorrt-cu12-libs==10.13.3.9.post1 \
-      tensorrt-cu12-bindings==10.13.3.9.post1 \
-      nvidia-cuda-runtime-cu12==12.9.79 \
-      polygraphy
 
 # Runtime libraries
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -117,9 +104,27 @@ RUN for repo in \
             python "/ComfyUI/custom_nodes/$repo_dir/install.py"; \
         fi; \
     done
+# -----------------------------------------------------------------------------
+# Pin TensorRT to a known-good build (fixes: TypeError: pybind11::init(): factory
+# function returned nullptr / CUDA init failure 35 in this container).
+#
+# Rationale:
+# - Some ComfyUI node requirements may pull `tensorrt` 10.14+ which can break
+#   on certain driver/CUDA combinations.
+# - You already verified that `tensorrt-cu12==10.13.3.9.post1` works.
+# -----------------------------------------------------------------------------
+RUN /opt/venv/bin/pip uninstall -y \
+      tensorrt tensorrt-cu12 tensorrt-cu13 \
+      tensorrt_cu13 tensorrt_cu13_libs tensorrt_cu13_bindings \
+      tensorrt_cu12 tensorrt_cu12_libs tensorrt_cu12_bindings \
+      cuda-toolkit nvidia-cuda-runtime || true \
+ && /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
+      "tensorrt-cu12==10.13.3.9.post1" \
+ && /opt/venv/bin/python -c "import tensorrt as trt; print('TRT', trt.__version__, trt.__file__); trt.Builder(trt.Logger()); print('Builder OK')"
 
+COPY src/start.sh /start.sh
 COPY src/start_script.sh /start_script.sh
-RUN chmod +x /start_script.sh
+RUN chmod +x /start.sh /start_script.sh
 COPY 4xLSDIR.pth /4xLSDIR.pth
 
 CMD ["/start_script.sh"]
