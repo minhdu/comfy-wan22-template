@@ -33,6 +33,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Core Python tooling
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install packaging setuptools wheel
+# ------------------------------------------------------------
+# TensorRT runtime for ComfyUI-Upscaler-Tensorrt (pinned)
+# + remove CUDA stub libcuda to prevent wrong library being picked
+# ------------------------------------------------------------
+RUN rm -f /usr/local/cuda/lib64/stubs/libcuda.so* || true && ldconfig
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --extra-index-url https://pypi.nvidia.com \
+      tensorrt-cu12==10.13.3.9.post1 \
+      tensorrt-cu12-libs==10.13.3.9.post1 \
+      tensorrt-cu12-bindings==10.13.3.9.post1 \
+      nvidia-cuda-runtime-cu12==12.9.79 \
+      polygraphy
 
 # Runtime libraries
 RUN --mount=type=cache,target=/root/.cache/pip \
