@@ -104,15 +104,6 @@ RUN for repo in \
             python "/ComfyUI/custom_nodes/$repo_dir/install.py"; \
         fi; \
     done
-# Pin TensorRT to a known-good build.
-RUN /opt/venv/bin/pip uninstall -y \
-      tensorrt tensorrt-cu12 tensorrt-cu13 \
-      tensorrt_cu13 tensorrt_cu13_libs tensorrt_cu13_bindings \
-      tensorrt_cu12 tensorrt_cu12_libs tensorrt_cu12_bindings \
-      cuda-toolkit nvidia-cuda-runtime || true \
- && /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
-      "tensorrt-cu12==10.13.3.9.post1" \
- && /opt/venv/bin/python -c "import tensorrt as trt; print('TRT', trt.__version__, trt.__file__)"
 
 COPY src/start.sh /start.sh
 COPY src/start_script.sh /start_script.sh
