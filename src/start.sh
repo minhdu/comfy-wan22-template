@@ -167,10 +167,6 @@ fi
 
 # Download Wan Animate model
 
-echo "Downloading optimization loras"
-download_model "https://huggingface.co/Kijai/WanVideo_comfy/blob/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors" "$LORAS_DIR/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors"
-download_model "https://huggingface.co/Kijai/WanVideo_comfy/blob/709844db75d2e15582cf204e9a0b5e12b23a35dd/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors" "$LORAS_DIR/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
-
 # Download text encoders
 echo "Downloading text encoders..."
 
