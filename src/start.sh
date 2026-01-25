@@ -13,6 +13,34 @@ else
     echo "additional_params.sh not found in /workspace. Skipping..."
 fi
 
+# ===== TensorRT pin (fix pybind11::init() nullptr) =====
+PIP="/opt/venv/bin/pip"
+PY="/opt/venv/bin/python"
+
+ensure_trt_cu12() {
+  echo "🔧 Checking TensorRT version..."
+  if $PY -c "import tensorrt as trt; print(trt.__version__)" 2>/dev/null | grep -q "^10\.13\.3\.9"; then
+    echo "✅ TensorRT already pinned to 10.13.3.9.*"
+    return 0
+  fi
+
+  echo "🔧 Reinstalling TensorRT (cu12) -> 10.13.3.9.post1"
+  $PIP uninstall -y \
+    tensorrt tensorrt-cu12 tensorrt-cu13 \
+    tensorrt_cu13 tensorrt_cu13_libs tensorrt_cu13_bindings \
+    tensorrt_cu12 tensorrt_cu12_libs tensorrt_cu12_bindings \
+    cuda-toolkit nvidia-cuda-runtime || true
+
+  $PIP install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
+    "tensorrt-cu12==10.13.3.9.post1"
+
+  echo "🔍 Verifying TensorRT import..."
+  $PY -c "import tensorrt as trt; print('TensorRT OK:', trt.__version__)"
+}
+
+ensure_trt_cu12
+# ===== end TensorRT pin =====
+
 if ! which aria2 > /dev/null 2>&1; then
     echo "Installing aria2..."
     apt-get update && apt-get install -y aria2
