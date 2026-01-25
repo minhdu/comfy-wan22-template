@@ -644,54 +644,6 @@ for file in *.zip; do
     mv "$file" "${file%.zip}.safetensors"
 done
 
-############################################
-# TensorRT pin (fix pybind11 nullptr / TRT mismatch)
-############################################
-set +e
-
-TRT_WANTED="10.13.3.9.post1"
-
-TRT_CUR="$(
-/opt/venv/bin/python - <<'PY'
-try:
-    import tensorrt as trt
-    print(trt.__version__)
-except Exception:
-    print("MISSING")
-PY
-)"
-
-echo "[TRT FIX] current=${TRT_CUR} wanted=${TRT_WANTED}"
-
-if [ "${TRT_CUR}" != "${TRT_WANTED}" ]; then
-  echo "[TRT FIX] uninstall conflicting packages..."
-  /opt/venv/bin/pip uninstall -y \
-    tensorrt tensorrt-cu12 tensorrt-cu13 \
-    tensorrt_cu13 tensorrt_cu13_libs tensorrt_cu13_bindings \
-    tensorrt_cu12 tensorrt_cu12_libs tensorrt_cu12_bindings \
-    cuda-toolkit nvidia-cuda-runtime nvidia-cuda-runtime-cu12 \
-    || true
-
-  echo "[TRT FIX] install pinned tensorrt-cu12 ${TRT_WANTED} (from NVIDIA index)..."
-  /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
-    "tensorrt-cu12==${TRT_WANTED}"
-
-  # (Tuỳ chọn nhưng khuyến nghị để tránh torch bị conflict runtime)
-  # Nếu bạn đang dùng torch pinned 12.8.90, bạn có thể pin lại runtime về đúng 12.8.90:
-  # /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
-  #   "nvidia-cuda-runtime-cu12==12.8.90"
-fi
-
-/opt/venv/bin/python - <<'PY'
-import tensorrt as trt
-print("[TRT FIX] TRT", trt.__version__, trt.__file__)
-PY
-
-set -e
-############################################
-# end TensorRT pin
-############################################
-
 # Start ComfyUI
 
 echo "▶️  Starting ComfyUI"
