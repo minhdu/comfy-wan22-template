@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+export PATH="/opt/venv/bin:$PATH"
+PIP="/opt/venv/bin/pip"
+PY="/opt/venv/bin/python"
+
 # Use libtcmalloc for better memory management
 TCMALLOC="$(ldconfig -p | grep -Po "libtcmalloc.so.\d" | head -n 1)"
 export LD_PRELOAD="${TCMALLOC}"
@@ -14,8 +18,6 @@ else
 fi
 
 # ===== TensorRT pin (fix pybind11::init() nullptr) =====
-PIP="/opt/venv/bin/pip"
-PY="/opt/venv/bin/python"
 
 ensure_trt_cu12() {
   echo "🔧 Checking TensorRT version..."
@@ -87,7 +89,7 @@ git clone "https://github.com/Hearmeman24/CivitAI_Downloader.git" || { echo "Git
 mv CivitAI_Downloader/download_with_aria.py "/usr/local/bin/" || { echo "Move failed"; exit 1; }
 chmod +x "/usr/local/bin/download_with_aria.py" || { echo "Chmod failed"; exit 1; }
 rm -rf CivitAI_Downloader  # Clean up the cloned repo
-pip install onnxruntime-gpu &
+$PIP install onnxruntime-gpu &
 
 if [ ! -d "$NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper" ]; then
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes
@@ -106,20 +108,20 @@ else
     git pull
 fi
 echo "🔧 Installing KJNodes packages..."
-pip install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
 KJ_PID=$!
 
 echo "🔧 Installing WanVideoWrapper packages..."
-pip install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
 WAN_PID=$!
 export change_preview_method="true"
 echo "Building SageAttention in the background"
 (
   git clone https://github.com/thu-ml/SageAttention.git
   cd SageAttention || exit 1
-  python3 setup.py install
+  $PY setup.py install
   cd /
-  pip install --no-cache-dir triton
+  $PIP install --no-cache-dir triton
 ) &> /var/log/sage_build.log &      # run in background, log output
 
 BUILD_PID=$!
@@ -355,10 +357,10 @@ echo "🎯 PRIORITY 2: LoRA & VAE Models"
 echo "----------------------------------------"
 
 echo "Starting LoRA & VAE batch 1..."
-python3 /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
+$PY /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
 PID1=$!
 PID2=$!
-python3 /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
+$PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
 PID3=$!
 
 echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
@@ -428,7 +430,7 @@ echo "🎯 PRIORITY 3: Upscaler & Embeddings"
 echo "----------------------------------------"
 
 echo "Starting Upscaler & Embeddings batch 1..."
-python3 /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
+$PY /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
 PID6=$!
 PID7=$!
 PID8=$!
@@ -673,9 +675,9 @@ done
 echo "▶️  Starting ComfyUI"
 
 # Check if sageattention is installed and available
-if python3 -c "import sageattention" 2>/dev/null; then
+if $PY -c "import sageattention" 2>/dev/null; then
     echo "🔧 SageAttention detected - using optimized mode"
-    nohup python3 "$NETWORK_VOLUME/ComfyUI/main.py" --listen --use-sage-attention > "$NETWORK_VOLUME/comfyui_${RUNPOD_POD_ID}_nohup.log" 2>&1 &
+    nohup $PY "$NETWORK_VOLUME/ComfyUI/main.py" --listen --use-sage-attention > "$NETWORK_VOLUME/comfyui_${RUNPOD_POD_ID}_nohup.log" 2>&1 &
 else
     echo "**************************************************************"
     echo "⚠️  WARNING: SageAttention not available - using standard mode"
@@ -686,7 +688,7 @@ else
     echo "   • Make sure you select CUDA version 12.8 or 12.9"
     echo "   • Check the additional filters tab before deploying"
     echo "**************************************************************"
-    nohup python3 "$NETWORK_VOLUME/ComfyUI/main.py" --listen > "$NETWORK_VOLUME/comfyui_${RUNPOD_POD_ID}_nohup.log" 2>&1 &
+    nohup $PY "$NETWORK_VOLUME/ComfyUI/main.py" --listen > "$NETWORK_VOLUME/comfyui_${RUNPOD_POD_ID}_nohup.log" 2>&1 &
 fi
 
     # Counter for timeout
