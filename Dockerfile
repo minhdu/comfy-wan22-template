@@ -47,6 +47,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     /usr/bin/yes | comfy --workspace /ComfyUI install
 
 FROM base AS final
+COPY src/pip-constraints.txt /pip-constraints.txt
+ENV PIP_EXTRA_INDEX_URL="https://pypi.nvidia.com" \
+    PIP_CONSTRAINT="/pip-constraints.txt"
+	
 # Make sure to use the virtual environment here too
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install opencv-python
