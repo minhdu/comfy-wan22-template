@@ -1,0 +1,2 @@
+tensorrt-cu12==10.13.3.9.post1
+tensorrt==10.13.3.9.post1
