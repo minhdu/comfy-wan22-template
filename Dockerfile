@@ -93,6 +93,12 @@ RUN for repo in \
 	https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader \
 	https://github.com/MoonGoblinDev/Civicomfy \
     https://github.com/M1kep/ComfyLiterals.git \
+	https://github.com/ComfyAssets/ComfyUI_Selectors \
+	https://github.com/StableLlama/ComfyUI-basic_data_handling \
+	https://github.com/ltdrdata/ComfyUI-Impact-Subpack \
+	https://github.com/melMass/comfy_mtb \
+	https://github.com/LAOGOU-666/Comfyui-Memory_Cleanup \
+	https://github.com/kijai/ComfyUI-GIMM-VFI \
 	https://github.com/yuvraj108c/ComfyUI-Upscaler-Tensorrt.git; \
     do \
         cd /ComfyUI/custom_nodes; \
