@@ -93,6 +93,7 @@ RUN for repo in \
 	https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader \
 	https://github.com/MoonGoblinDev/Civicomfy \
     https://github.com/M1kep/ComfyLiterals.git; \
+	https://github.com/yuvraj108c/ComfyUI-Upscaler-Tensorrt.git \
     do \
         cd /ComfyUI/custom_nodes; \
         repo_dir=$(basename "$repo" .git); \
@@ -108,6 +109,17 @@ RUN for repo in \
             python "/ComfyUI/custom_nodes/$repo_dir/install.py"; \
         fi; \
     done
+	
+# Sanitize TRT/CUDA python packages to match the known-good manual fix
+RUN /opt/venv/bin/pip uninstall -y \
+  cuda-toolkit nvidia-cuda-runtime nvidia-cuda-runtime-cu12 \
+  tensorrt-cu13 tensorrt_cu13 tensorrt_cu13_libs tensorrt_cu13_bindings \
+  tensorrt tensorrt-cu12 \
+  tensorrt_cu12 tensorrt_cu12_libs tensorrt_cu12_bindings \
+  || true && \
+  /opt/venv/bin/pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com \
+  "tensorrt-cu12==10.13.3.9.post1" && \
+  /opt/venv/bin/python -c "import tensorrt as trt; print('Final TRT:', trt.__version__, trt.__file__)"
 
 COPY src/start_script.sh /start_script.sh
 RUN chmod +x /start_script.sh
