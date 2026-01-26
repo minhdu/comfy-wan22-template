@@ -92,8 +92,8 @@ RUN for repo in \
 	https://github.com/pythongosssss/ComfyUI-Custom-Scripts \
 	https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader \
 	https://github.com/MoonGoblinDev/Civicomfy \
-    https://github.com/M1kep/ComfyLiterals.git; \
-	https://github.com/yuvraj108c/ComfyUI-Upscaler-Tensorrt.git \
+    https://github.com/M1kep/ComfyLiterals.git \
+	https://github.com/yuvraj108c/ComfyUI-Upscaler-Tensorrt.git; \
     do \
         cd /ComfyUI/custom_nodes; \
         repo_dir=$(basename "$repo" .git); \
