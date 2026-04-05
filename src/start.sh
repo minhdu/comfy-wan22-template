@@ -63,8 +63,6 @@ git clone "https://github.com/Hearmeman24/CivitAI_Downloader.git" || { echo "Git
 mv CivitAI_Downloader/download_with_aria.py "/usr/local/bin/" || { echo "Move failed"; exit 1; }
 chmod +x "/usr/local/bin/download_with_aria.py" || { echo "Chmod failed"; exit 1; }
 rm -rf CivitAI_Downloader  # Clean up the cloned repo
-$PIP install onnxruntime-gpu &
-
 if [ ! -d "$NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper" ]; then
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes
     git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
@@ -81,25 +79,7 @@ else
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes
     git pull
 fi
-echo "🔧 Installing KJNodes packages..."
-$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
-KJ_PID=$!
-
-echo "🔧 Installing WanVideoWrapper packages..."
-$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
-WAN_PID=$!
 export change_preview_method="true"
-echo "Building SageAttention in the background"
-(
-  git clone https://github.com/thu-ml/SageAttention.git
-  cd SageAttention || exit 1
-  $PY setup.py install
-  cd /
-  $PIP install --no-cache-dir triton
-) &> /var/log/sage_build.log &      # run in background, log output
-
-BUILD_PID=$!
-echo "Background build started (PID: $BUILD_PID)"
 
 # Change to the directory
 cd "$CUSTOM_NODES_DIR" || exit 1
@@ -141,6 +121,72 @@ download_model() {
     aria2c -x 16 -s 16 -k 1M --continue=true -d "$destination_dir" -o "$destination_file" "$url" &
 
     echo "Download started in background for $destination_file"
+}
+
+
+wait_for_aria2_downloads() {
+    while pgrep -x "aria2c" > /dev/null; do
+        echo "🔽 Downloads still in progress..."
+        sleep 5
+    done
+}
+
+download_model_sync() {
+    local url="$1"
+    local full_path="$2"
+
+    download_model "$url" "$full_path"
+    wait_for_aria2_downloads
+}
+
+download_hf_folder_sync() {
+    local repo_id="$1"
+    local folder_path="$2"
+    local output_dir="$3"
+
+    mkdir -p "$output_dir"
+
+    echo "📂 Downloading Hugging Face folder: $repo_id/$folder_path"
+    local tmp_json
+    tmp_json=$(mktemp)
+
+    if ! curl -fsSL "https://huggingface.co/api/models/${repo_id}/tree/main/${folder_path}?recursive=1" -o "$tmp_json"; then
+        echo "❌ Failed to fetch folder listing for $repo_id/$folder_path"
+        rm -f "$tmp_json"
+        return 1
+    fi
+
+    mapfile -t hf_files < <($PY - "$tmp_json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+for item in data:
+    path = item.get("path")
+    item_type = item.get("type")
+    if path and item_type == "file":
+        print(path)
+PY
+)
+
+    rm -f "$tmp_json"
+
+    if [ ${#hf_files[@]} -eq 0 ]; then
+        echo "⚠️  No files found in Hugging Face folder: $repo_id/$folder_path"
+        return 1
+    fi
+
+    for relative_path in "${hf_files[@]}"; do
+        local relative_output="${relative_path#${folder_path}/}"
+        local target_path="$output_dir/$relative_output"
+        local url="https://huggingface.co/${repo_id}/resolve/main/${relative_path}"
+
+        download_model_sync "$url" "$target_path"
+    done
+
+    echo "✅ Hugging Face folder download complete: $repo_id/$folder_path"
 }
 
 # Define base paths
@@ -236,14 +282,6 @@ done
 
 echo "✅ All models downloaded successfully!"
 
-# poll every 5 s until the PID is gone
-  while kill -0 "$BUILD_PID" 2>/dev/null; do
-    echo "🛠️ Building SageAttention in progress... (this can take around 5 minutes)"
-    sleep 10
-  done
-
-  echo "Build complete"
-
 echo "All downloads completed!"
 
 # ========== EXTRA MODELS - PRIORITIZED & SEQUENTIAL ==========
@@ -263,180 +301,165 @@ echo "  ✅ $VAE_DIR"
 echo "  ✅ $UPSCALE_DIR"
 echo "  ✅ $EMB_DIR"
 
-# Helper to wait until all aria2 downloads have finished
-wait_for_aria2_completion() {
-    local label="${1:-downloads}"
-    while pgrep -x "aria2c" > /dev/null; do
-        echo "⏳ Waiting for $label to finish before starting next large download..."
-        sleep 5
-    done
-}
-
-# Function to download a large file synchronously using the same aria2 method
-download_model_sync() {
-    local url="$1"
-    local full_path="$2"
-    local description="${3:-$(basename "$2")}"
-
-    local destination_dir
-    destination_dir=$(dirname "$full_path")
-    local destination_file
-    destination_file=$(basename "$full_path")
-
-    mkdir -p "$destination_dir"
-
-    # Simple corruption check: file < 10MB or .aria2 files
-    if [ -f "$full_path" ]; then
-        local size_bytes
-        size_bytes=$(stat -f%z "$full_path" 2>/dev/null || stat -c%s "$full_path" 2>/dev/null || echo 0)
-        local size_mb=$((size_bytes / 1024 / 1024))
-
-        if [ "$size_bytes" -lt 10485760 ]; then
-            echo "🗑️  Deleting corrupted file (${size_mb}MB < 10MB): $full_path"
-            rm -f "$full_path"
-        else
-            echo "✅ $description already exists (${size_mb}MB), skipping download."
-            return 0
-        fi
-    fi
-
-    if [ -f "${full_path}.aria2" ]; then
-        echo "🗑️  Deleting .aria2 control file: ${full_path}.aria2"
-        rm -f "${full_path}.aria2"
-        rm -f "$full_path"
-    fi
-
-    wait_for_aria2_completion "$description"
-
-    echo "📥 Downloading $description to $destination_dir..."
-    aria2c \
-        -x 16 \
-        -s 16 \
-        -k 1M \
-        --continue=true \
-        --allow-overwrite=true \
-        --auto-file-renaming=false \
-        --console-log-level=warn \
-        --summary-interval=30 \
-        -d "$destination_dir" \
-        -o "$destination_file" \
-        "$url"
-
-    if [ $? -eq 0 ]; then
-        echo "✅ Downloaded $description"
-        return 0
-    else
-        echo "❌ Failed to download $description"
-        return 1
-    fi
-}
-
 # ============================================================
-# PRIORITY 1: GGUF Models from Hugging Face (download one by one)
+# PRIORITY 1: GGUF Models from Hugging Face (download fully before install/build)
 # ============================================================
 echo ""
-echo "🎯 PRIORITY 1: GGUF Models"
+echo "🎯 PRIORITY 1: GGUF Models (Hugging Face)"
 echo "----------------------------------------"
 
-download_model_sync \
-    "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" \
-    "$UNET_DIR/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" \
-    "Wan2.2 I2V A14B HighNoise Q8_0 GGUF"
-
-download_model_sync \
-    "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" \
-    "$UNET_DIR/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" \
-    "Wan2.2 I2V A14B LowNoise Q8_0 GGUF"
+download_model_sync "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf"
+download_model_sync "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf"
 
 echo "✅ GGUF models download complete"
 ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
 
 # ============================================================
-# PRIORITY 2: Existing LoRA & VAE + full HF LoRA folder
+# PRIORITY 1.5: Hugging Face LoRA folder (download fully before install/build)
+# ============================================================
+echo ""
+echo "🎯 PRIORITY 1.5: Wan 2.2 Lightning LoRA Folder (Hugging Face)"
+echo "----------------------------------------"
+
+download_hf_folder_sync "lightx2v/Wan2.2-Lightning" "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1" "$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+
+echo "✅ Hugging Face LoRA folder download complete"
+
+# ============================================================
+# PRIORITY 2: LoRA & VAE (download in parallel, small batch)
 # ============================================================
 echo ""
 echo "🎯 PRIORITY 2: LoRA & VAE Models"
 echo "----------------------------------------"
 
-echo "Starting existing LoRA & VAE batch..."
+echo "Starting LoRA & VAE batch 1..."
 $PY /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
 PID1=$!
-$PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
 PID2=$!
+$PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
+PID3=$!
 
-echo "Batch PIDs: $PID1, $PID2"
-echo "⏳ Waiting for existing LoRA & VAE batch..."
+echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
+echo "⏳ Waiting for LoRA & VAE batch 1 (max 10 minutes)..."
 
-wait "$PID1"
-STATUS1=$?
-wait "$PID2"
-STATUS2=$?
+# Wait with timeout
+WAIT_COUNT=0
+MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
 
-if [ $STATUS1 -ne 0 ]; then
-    echo "❌ Existing LoRA download failed"
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Check if all processes are done
+    RUNNING=0
+    kill -0 $PID1 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID2 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID3 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 1 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 1, killing stuck processes..."
+    kill $PID1 $PID2 $PID3 2>/dev/null
 fi
 
-if [ $STATUS2 -ne 0 ]; then
-    echo "❌ Existing VAE download failed"
+echo "Starting LoRA batch 2..."
+PID4=$!
+PID5=$!
+
+echo "Batch 2 PIDs: $PID4, $PID5"
+echo "⏳ Waiting for LoRA batch 2 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID4 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID5 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached for batch 2, killing stuck processes..."
+    kill $PID4 $PID5 2>/dev/null
 fi
-
-wait_for_aria2_completion "existing LoRA & VAE batch"
-
-echo "Downloading full Hugging Face LoRA folder sequentially..."
-LORA_LIGHTNING_DIR="$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
-mkdir -p "$LORA_LIGHTNING_DIR"
-
-download_model_sync \
-    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-NativeComfy.json" \
-    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-NativeComfy.json" \
-    "Wan2.2 Lightning NativeComfy JSON"
-
-download_model_sync \
-    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.json" \
-    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.json" \
-    "Wan2.2 Lightning forKJ JSON"
-
-download_model_sync \
-    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.mp4" \
-    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.mp4" \
-    "Wan2.2 Lightning preview MP4"
-
-download_model_sync \
-    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" \
-    "$LORA_LIGHTNING_DIR/high_noise_model.safetensors" \
-    "Wan2.2 Lightning high noise LoRA"
-
-download_model_sync \
-    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" \
-    "$LORA_LIGHTNING_DIR/low_noise_model.safetensors" \
-    "Wan2.2 Lightning low noise LoRA"
 
 echo "✅ LoRA & VAE models complete"
 
 # ============================================================
-# PRIORITY 3: Upscaler
+# PRIORITY 3: Upscaler & Embeddings (parallel)
 # ============================================================
 echo ""
-echo "🎯 PRIORITY 3: Upscaler"
+echo "🎯 PRIORITY 3: Upscaler & Embeddings"
 echo "----------------------------------------"
 
-echo "Starting Upscaler batch..."
+echo "Starting Upscaler & Embeddings batch 1..."
 $PY /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
-PID3=$!
+PID6=$!
+PID7=$!
+PID8=$!
 
-echo "Batch PID: $PID3"
-echo "⏳ Waiting for Upscaler batch..."
+echo "Batch 1 PIDs: $PID6, $PID7, $PID8"
+echo "⏳ Waiting for Upscaler & Embeddings batch 1 (max 10 minutes)..."
 
-wait "$PID3"
-STATUS3=$?
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    RUNNING=0
+    kill -0 $PID6 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID7 2>/dev/null && RUNNING=$((RUNNING + 1))
+    kill -0 $PID8 2>/dev/null && RUNNING=$((RUNNING + 1))
+    
+    if [ $RUNNING -eq 0 ]; then
+        echo "✅ Batch 1 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
 
-if [ $STATUS3 -ne 0 ]; then
-    echo "❌ Upscaler download failed"
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached, killing stuck processes..."
+    kill $PID6 $PID7 $PID8 2>/dev/null
 fi
 
-wait_for_aria2_completion "upscaler batch"
+echo "Starting Embeddings batch 2..."
+PID9=$!
 
-echo "✅ Upscaler complete"
+echo "Batch 2 PID: $PID9"
+echo "⏳ Waiting for Embeddings batch 2 (max 10 minutes)..."
+
+WAIT_COUNT=0
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    if ! kill -0 $PID9 2>/dev/null; then
+        echo "✅ Batch 2 complete"
+        break
+    fi
+    
+    echo "📥 Still downloading... (${WAIT_COUNT}s elapsed)"
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+    echo "⚠️  Timeout reached, killing stuck process..."
+    kill $PID9 2>/dev/null
+fi
+
+echo "✅ Upscaler & Embeddings complete"
 
 # ============================================================
 # FINAL CHECK
@@ -521,6 +544,32 @@ fi
 
 echo "Finished downloading models!"
 
+echo "Starting dependency installation after all downloads are complete..."
+
+echo "Installing onnxruntime-gpu..."
+$PIP install onnxruntime-gpu &
+ONNX_PID=$!
+
+echo "🔧 Installing KJNodes packages..."
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
+KJ_PID=$!
+
+echo "🔧 Installing WanVideoWrapper packages..."
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
+WAN_PID=$!
+
+echo "Building SageAttention in the background"
+(
+  git clone https://github.com/thu-ml/SageAttention.git
+  cd SageAttention || exit 1
+  $PY setup.py install
+  cd /
+  $PIP install --no-cache-dir triton
+) &> /var/log/sage_build.log &
+
+BUILD_PID=$!
+echo "Background build started (PID: $BUILD_PID)"
+
 echo "Checking and copying workflow..."
 mkdir -p "$WORKFLOW_DIR"
 
@@ -600,13 +649,24 @@ fi
 echo "cd $NETWORK_VOLUME" >> ~/.bashrc
 
 # Install dependencies
+wait $ONNX_PID
+ONNX_STATUS=$?
+
 wait $KJ_PID
-  KJ_STATUS=$?
+KJ_STATUS=$?
 
 wait $WAN_PID
 WAN_STATUS=$?
+
+echo "✅ onnxruntime-gpu install complete"
 echo "✅ KJNodes install complete"
 echo "✅ WanVideoWrapper install complete"
+
+if [ $ONNX_STATUS -ne 0 ]; then
+  echo "❌ onnxruntime-gpu install failed."
+  exit 1
+fi
+
 # Check results
 if [ $KJ_STATUS -ne 0 ]; then
   echo "❌ KJNodes install failed."
@@ -617,6 +677,13 @@ if [ $WAN_STATUS -ne 0 ]; then
   echo "❌ WanVideoWrapper install failed."
   exit 1
 fi
+
+while kill -0 "$BUILD_PID" 2>/dev/null; do
+  echo "🛠️ Building SageAttention in progress... (this can take around 5 minutes)"
+  sleep 10
+done
+
+echo "Build complete"
 echo "Renaming loras downloaded as zip files to safetensors files"
 cd $LORAS_DIR
 for file in *.zip; do
