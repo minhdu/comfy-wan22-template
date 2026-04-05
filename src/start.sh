@@ -263,40 +263,65 @@ echo "  ✅ $VAE_DIR"
 echo "  ✅ $UPSCALE_DIR"
 echo "  ✅ $EMB_DIR"
 
-# Get API token from environment variable
-if [ -z "$civitai_token" ]; then
-    echo "⚠️  Warning: civitai_token environment variable not set"
-    echo "   Please set it in RunPod environment variables"
-    echo "   Skipping GGUF downloads..."
-    SKIP_GGUF=true
-else
-    echo "✅ CivitAI token found"
-    CIVITAI_TOKEN="$civitai_token"
-    SKIP_GGUF=false
-fi
+# Helper to wait until all aria2 downloads have finished
+wait_for_aria2_completion() {
+    local label="${1:-downloads}"
+    while pgrep -x "aria2c" > /dev/null; do
+        echo "⏳ Waiting for $label to finish before starting next large download..."
+        sleep 5
+    done
+}
 
-# Function to download from CivitAI directly
-download_civitai() {
-    local model_id="$1"
-    local output_dir="$2"
-    local description="$3"
-    
-    echo "📦 Downloading $description (ID: $model_id) to $output_dir"
-    
-    local url="https://civitai.com/api/download/models/${model_id}?token=${CIVITAI_TOKEN}"
-    
+# Function to download a large file synchronously using the same aria2 method
+download_model_sync() {
+    local url="$1"
+    local full_path="$2"
+    local description="${3:-$(basename "$2")}"
+
+    local destination_dir
+    destination_dir=$(dirname "$full_path")
+    local destination_file
+    destination_file=$(basename "$full_path")
+
+    mkdir -p "$destination_dir"
+
+    # Simple corruption check: file < 10MB or .aria2 files
+    if [ -f "$full_path" ]; then
+        local size_bytes
+        size_bytes=$(stat -f%z "$full_path" 2>/dev/null || stat -c%s "$full_path" 2>/dev/null || echo 0)
+        local size_mb=$((size_bytes / 1024 / 1024))
+
+        if [ "$size_bytes" -lt 10485760 ]; then
+            echo "🗑️  Deleting corrupted file (${size_mb}MB < 10MB): $full_path"
+            rm -f "$full_path"
+        else
+            echo "✅ $description already exists (${size_mb}MB), skipping download."
+            return 0
+        fi
+    fi
+
+    if [ -f "${full_path}.aria2" ]; then
+        echo "🗑️  Deleting .aria2 control file: ${full_path}.aria2"
+        rm -f "${full_path}.aria2"
+        rm -f "$full_path"
+    fi
+
+    wait_for_aria2_completion "$description"
+
+    echo "📥 Downloading $description to $destination_dir..."
     aria2c \
-        --max-connection-per-server=4 \
-        --split=4 \
-        --min-split-size=1M \
+        -x 16 \
+        -s 16 \
+        -k 1M \
         --continue=true \
-        --auto-file-renaming=false \
         --allow-overwrite=true \
+        --auto-file-renaming=false \
         --console-log-level=warn \
         --summary-interval=30 \
-        --dir="$output_dir" \
+        -d "$destination_dir" \
+        -o "$destination_file" \
         "$url"
-    
+
     if [ $? -eq 0 ]; then
         echo "✅ Downloaded $description"
         return 0
@@ -307,157 +332,111 @@ download_civitai() {
 }
 
 # ============================================================
-# PRIORITY 1: GGUF Models (download synchronously, one by one)
+# PRIORITY 1: GGUF Models from Hugging Face (download one by one)
 # ============================================================
-if [ "$SKIP_GGUF" = false ]; then
-    echo ""
-    echo "🎯 PRIORITY 1: GGUF Models"
-    echo "----------------------------------------"
+echo ""
+echo "🎯 PRIORITY 1: GGUF Models"
+echo "----------------------------------------"
 
-    download_civitai 2060943 "$UNET_DIR" "GGUF Model 1 (2060943)"
-    download_civitai 2060527 "$UNET_DIR" "GGUF Model 2 (2060527)"
+download_model_sync \
+    "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" \
+    "$UNET_DIR/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" \
+    "Wan2.2 I2V A14B HighNoise Q8_0 GGUF"
 
-    echo "✅ GGUF models download complete"
-    ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
-else
-    echo "⏭️  Skipping GGUF downloads (no token)"
-fi
+download_model_sync \
+    "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" \
+    "$UNET_DIR/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" \
+    "Wan2.2 I2V A14B LowNoise Q8_0 GGUF"
+
+echo "✅ GGUF models download complete"
+ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
 
 # ============================================================
-# PRIORITY 2: LoRA & VAE (download in parallel, small batch)
+# PRIORITY 2: Existing LoRA & VAE + full HF LoRA folder
 # ============================================================
 echo ""
 echo "🎯 PRIORITY 2: LoRA & VAE Models"
 echo "----------------------------------------"
 
-echo "Starting LoRA & VAE batch 1..."
+echo "Starting existing LoRA & VAE batch..."
 $PY /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
 PID1=$!
-PID2=$!
 $PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
-PID3=$!
+PID2=$!
 
-echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
-echo "⏳ Waiting for LoRA & VAE batch 1 (max 10 minutes)..."
+echo "Batch PIDs: $PID1, $PID2"
+echo "⏳ Waiting for existing LoRA & VAE batch..."
 
-# Wait with timeout
-WAIT_COUNT=0
-MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
+wait "$PID1"
+STATUS1=$?
+wait "$PID2"
+STATUS2=$?
 
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    # Check if all processes are done
-    RUNNING=0
-    kill -0 $PID1 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID2 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID3 2>/dev/null && RUNNING=$((RUNNING + 1))
-    
-    if [ $RUNNING -eq 0 ]; then
-        echo "✅ Batch 1 complete"
-        break
-    fi
-    
-    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
-
-if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached for batch 1, killing stuck processes..."
-    kill $PID1 $PID2 $PID3 2>/dev/null
+if [ $STATUS1 -ne 0 ]; then
+    echo "❌ Existing LoRA download failed"
 fi
 
-echo "Starting LoRA batch 2..."
-PID4=$!
-PID5=$!
-
-echo "Batch 2 PIDs: $PID4, $PID5"
-echo "⏳ Waiting for LoRA batch 2 (max 10 minutes)..."
-
-WAIT_COUNT=0
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    RUNNING=0
-    kill -0 $PID4 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID5 2>/dev/null && RUNNING=$((RUNNING + 1))
-    
-    if [ $RUNNING -eq 0 ]; then
-        echo "✅ Batch 2 complete"
-        break
-    fi
-    
-    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
-
-if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached for batch 2, killing stuck processes..."
-    kill $PID4 $PID5 2>/dev/null
+if [ $STATUS2 -ne 0 ]; then
+    echo "❌ Existing VAE download failed"
 fi
+
+wait_for_aria2_completion "existing LoRA & VAE batch"
+
+echo "Downloading full Hugging Face LoRA folder sequentially..."
+LORA_LIGHTNING_DIR="$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+mkdir -p "$LORA_LIGHTNING_DIR"
+
+download_model_sync \
+    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-NativeComfy.json" \
+    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-NativeComfy.json" \
+    "Wan2.2 Lightning NativeComfy JSON"
+
+download_model_sync \
+    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.json" \
+    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.json" \
+    "Wan2.2 Lightning forKJ JSON"
+
+download_model_sync \
+    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.mp4" \
+    "$LORA_LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1-forKJ.mp4" \
+    "Wan2.2 Lightning preview MP4"
+
+download_model_sync \
+    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" \
+    "$LORA_LIGHTNING_DIR/high_noise_model.safetensors" \
+    "Wan2.2 Lightning high noise LoRA"
+
+download_model_sync \
+    "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" \
+    "$LORA_LIGHTNING_DIR/low_noise_model.safetensors" \
+    "Wan2.2 Lightning low noise LoRA"
 
 echo "✅ LoRA & VAE models complete"
 
 # ============================================================
-# PRIORITY 3: Upscaler & Embeddings (parallel)
+# PRIORITY 3: Upscaler
 # ============================================================
 echo ""
-echo "🎯 PRIORITY 3: Upscaler & Embeddings"
+echo "🎯 PRIORITY 3: Upscaler"
 echo "----------------------------------------"
 
-echo "Starting Upscaler & Embeddings batch 1..."
+echo "Starting Upscaler batch..."
 $PY /usr/local/bin/download_with_aria.py -m 164821 -o "$UPSCALE_DIR" 2>&1 &
-PID6=$!
-PID7=$!
-PID8=$!
+PID3=$!
 
-echo "Batch 1 PIDs: $PID6, $PID7, $PID8"
-echo "⏳ Waiting for Upscaler & Embeddings batch 1 (max 10 minutes)..."
+echo "Batch PID: $PID3"
+echo "⏳ Waiting for Upscaler batch..."
 
-WAIT_COUNT=0
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    RUNNING=0
-    kill -0 $PID6 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID7 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID8 2>/dev/null && RUNNING=$((RUNNING + 1))
-    
-    if [ $RUNNING -eq 0 ]; then
-        echo "✅ Batch 1 complete"
-        break
-    fi
-    
-    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
+wait "$PID3"
+STATUS3=$?
 
-if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached, killing stuck processes..."
-    kill $PID6 $PID7 $PID8 2>/dev/null
+if [ $STATUS3 -ne 0 ]; then
+    echo "❌ Upscaler download failed"
 fi
 
-echo "Starting Embeddings batch 2..."
-PID9=$!
+wait_for_aria2_completion "upscaler batch"
 
-echo "Batch 2 PID: $PID9"
-echo "⏳ Waiting for Embeddings batch 2 (max 10 minutes)..."
-
-WAIT_COUNT=0
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    if ! kill -0 $PID9 2>/dev/null; then
-        echo "✅ Batch 2 complete"
-        break
-    fi
-    
-    echo "📥 Still downloading... (${WAIT_COUNT}s elapsed)"
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
-
-if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached, killing stuck process..."
-    kill $PID9 2>/dev/null
-fi
-
-echo "✅ Upscaler & Embeddings complete"
+echo "✅ Upscaler complete"
 
 # ============================================================
 # FINAL CHECK
@@ -696,4 +675,3 @@ fi
     fi
 
     sleep infinity
-fi
