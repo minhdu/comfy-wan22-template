@@ -63,6 +63,8 @@ git clone "https://github.com/Hearmeman24/CivitAI_Downloader.git" || { echo "Git
 mv CivitAI_Downloader/download_with_aria.py "/usr/local/bin/" || { echo "Move failed"; exit 1; }
 chmod +x "/usr/local/bin/download_with_aria.py" || { echo "Chmod failed"; exit 1; }
 rm -rf CivitAI_Downloader  # Clean up the cloned repo
+$PIP install onnxruntime-gpu &
+
 if [ ! -d "$NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper" ]; then
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes
     git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
@@ -79,7 +81,25 @@ else
     cd $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes
     git pull
 fi
+echo "🔧 Installing KJNodes packages..."
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
+KJ_PID=$!
+
+echo "🔧 Installing WanVideoWrapper packages..."
+$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
+WAN_PID=$!
 export change_preview_method="true"
+echo "Building SageAttention in the background"
+(
+  git clone https://github.com/thu-ml/SageAttention.git
+  cd SageAttention || exit 1
+  $PY setup.py install
+  cd /
+  $PIP install --no-cache-dir triton
+) &> /var/log/sage_build.log &      # run in background, log output
+
+BUILD_PID=$!
+echo "Background build started (PID: $BUILD_PID)"
 
 # Change to the directory
 cd "$CUSTOM_NODES_DIR" || exit 1
@@ -121,72 +141,6 @@ download_model() {
     aria2c -x 16 -s 16 -k 1M --continue=true -d "$destination_dir" -o "$destination_file" "$url" &
 
     echo "Download started in background for $destination_file"
-}
-
-
-wait_for_aria2_downloads() {
-    while pgrep -x "aria2c" > /dev/null; do
-        echo "🔽 Downloads still in progress..."
-        sleep 5
-    done
-}
-
-download_model_sync() {
-    local url="$1"
-    local full_path="$2"
-
-    download_model "$url" "$full_path"
-    wait_for_aria2_downloads
-}
-
-download_hf_folder_sync() {
-    local repo_id="$1"
-    local folder_path="$2"
-    local output_dir="$3"
-
-    mkdir -p "$output_dir"
-
-    echo "📂 Downloading Hugging Face folder: $repo_id/$folder_path"
-    local tmp_json
-    tmp_json=$(mktemp)
-
-    if ! curl -fsSL "https://huggingface.co/api/models/${repo_id}/tree/main/${folder_path}?recursive=1" -o "$tmp_json"; then
-        echo "❌ Failed to fetch folder listing for $repo_id/$folder_path"
-        rm -f "$tmp_json"
-        return 1
-    fi
-
-    mapfile -t hf_files < <($PY - "$tmp_json" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-for item in data:
-    path = item.get("path")
-    item_type = item.get("type")
-    if path and item_type == "file":
-        print(path)
-PY
-)
-
-    rm -f "$tmp_json"
-
-    if [ ${#hf_files[@]} -eq 0 ]; then
-        echo "⚠️  No files found in Hugging Face folder: $repo_id/$folder_path"
-        return 1
-    fi
-
-    for relative_path in "${hf_files[@]}"; do
-        local relative_output="${relative_path#${folder_path}/}"
-        local target_path="$output_dir/$relative_output"
-        local url="https://huggingface.co/${repo_id}/resolve/main/${relative_path}"
-
-        download_model_sync "$url" "$target_path"
-    done
-
-    echo "✅ Hugging Face folder download complete: $repo_id/$folder_path"
 }
 
 # Define base paths
@@ -282,6 +236,14 @@ done
 
 echo "✅ All models downloaded successfully!"
 
+# poll every 5 s until the PID is gone
+  while kill -0 "$BUILD_PID" 2>/dev/null; do
+    echo "🛠️ Building SageAttention in progress... (this can take around 5 minutes)"
+    sleep 10
+  done
+
+  echo "Build complete"
+
 echo "All downloads completed!"
 
 # ========== EXTRA MODELS - PRIORITIZED & SEQUENTIAL ==========
@@ -301,29 +263,65 @@ echo "  ✅ $VAE_DIR"
 echo "  ✅ $UPSCALE_DIR"
 echo "  ✅ $EMB_DIR"
 
+# Get API token from environment variable
+if [ -z "$civitai_token" ]; then
+    echo "⚠️  Warning: civitai_token environment variable not set"
+    echo "   Please set it in RunPod environment variables"
+    echo "   Skipping GGUF downloads..."
+    SKIP_GGUF=true
+else
+    echo "✅ CivitAI token found"
+    CIVITAI_TOKEN="$civitai_token"
+    SKIP_GGUF=false
+fi
+
+# Function to download from CivitAI directly
+download_civitai() {
+    local model_id="$1"
+    local output_dir="$2"
+    local description="$3"
+    
+    echo "📦 Downloading $description (ID: $model_id) to $output_dir"
+    
+    local url="https://civitai.com/api/download/models/${model_id}?token=${CIVITAI_TOKEN}"
+    
+    aria2c \
+        --max-connection-per-server=4 \
+        --split=4 \
+        --min-split-size=1M \
+        --continue=true \
+        --auto-file-renaming=false \
+        --allow-overwrite=true \
+        --console-log-level=warn \
+        --summary-interval=30 \
+        --dir="$output_dir" \
+        "$url"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Downloaded $description"
+        return 0
+    else
+        echo "❌ Failed to download $description"
+        return 1
+    fi
+}
+
 # ============================================================
-# PRIORITY 1: GGUF Models from Hugging Face (download fully before install/build)
+# PRIORITY 1: GGUF Models (download synchronously, one by one)
 # ============================================================
-echo ""
-echo "🎯 PRIORITY 1: GGUF Models (Hugging Face)"
-echo "----------------------------------------"
+if [ "$SKIP_GGUF" = false ]; then
+    echo ""
+    echo "🎯 PRIORITY 1: GGUF Models"
+    echo "----------------------------------------"
 
-download_model_sync "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf"
-download_model_sync "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf"
+    download_civitai 2060943 "$UNET_DIR" "GGUF Model 1 (2060943)"
+    download_civitai 2060527 "$UNET_DIR" "GGUF Model 2 (2060527)"
 
-echo "✅ GGUF models download complete"
-ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
-
-# ============================================================
-# PRIORITY 1.5: Hugging Face LoRA folder (download fully before install/build)
-# ============================================================
-echo ""
-echo "🎯 PRIORITY 1.5: Wan 2.2 Lightning LoRA Folder (Hugging Face)"
-echo "----------------------------------------"
-
-download_hf_folder_sync "lightx2v/Wan2.2-Lightning" "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1" "$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
-
-echo "✅ Hugging Face LoRA folder download complete"
+    echo "✅ GGUF models download complete"
+    ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
+else
+    echo "⏭️  Skipping GGUF downloads (no token)"
+fi
 
 # ============================================================
 # PRIORITY 2: LoRA & VAE (download in parallel, small batch)
@@ -544,32 +542,6 @@ fi
 
 echo "Finished downloading models!"
 
-echo "Starting dependency installation after all downloads are complete..."
-
-echo "Installing onnxruntime-gpu..."
-$PIP install onnxruntime-gpu &
-ONNX_PID=$!
-
-echo "🔧 Installing KJNodes packages..."
-$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-KJNodes/requirements.txt &
-KJ_PID=$!
-
-echo "🔧 Installing WanVideoWrapper packages..."
-$PIP install --no-cache-dir -r $NETWORK_VOLUME/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/requirements.txt &
-WAN_PID=$!
-
-echo "Building SageAttention in the background"
-(
-  git clone https://github.com/thu-ml/SageAttention.git
-  cd SageAttention || exit 1
-  $PY setup.py install
-  cd /
-  $PIP install --no-cache-dir triton
-) &> /var/log/sage_build.log &
-
-BUILD_PID=$!
-echo "Background build started (PID: $BUILD_PID)"
-
 echo "Checking and copying workflow..."
 mkdir -p "$WORKFLOW_DIR"
 
@@ -649,24 +621,13 @@ fi
 echo "cd $NETWORK_VOLUME" >> ~/.bashrc
 
 # Install dependencies
-wait $ONNX_PID
-ONNX_STATUS=$?
-
 wait $KJ_PID
-KJ_STATUS=$?
+  KJ_STATUS=$?
 
 wait $WAN_PID
 WAN_STATUS=$?
-
-echo "✅ onnxruntime-gpu install complete"
 echo "✅ KJNodes install complete"
 echo "✅ WanVideoWrapper install complete"
-
-if [ $ONNX_STATUS -ne 0 ]; then
-  echo "❌ onnxruntime-gpu install failed."
-  exit 1
-fi
-
 # Check results
 if [ $KJ_STATUS -ne 0 ]; then
   echo "❌ KJNodes install failed."
@@ -677,13 +638,6 @@ if [ $WAN_STATUS -ne 0 ]; then
   echo "❌ WanVideoWrapper install failed."
   exit 1
 fi
-
-while kill -0 "$BUILD_PID" 2>/dev/null; do
-  echo "🛠️ Building SageAttention in progress... (this can take around 5 minutes)"
-  sleep 10
-done
-
-echo "Build complete"
 echo "Renaming loras downloaded as zip files to safetensors files"
 cd $LORAS_DIR
 for file in *.zip; do
@@ -742,3 +696,4 @@ fi
     fi
 
     sleep infinity
+fi
