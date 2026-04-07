@@ -296,20 +296,26 @@ echo "✅ GGUF models download complete"
 ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
 
 # ============================================================
-# PRIORITY 2: LoRA folder from Hugging Face + VAE
+# PRIORITY 2: LoRA files + VAE
 # ============================================================
 echo ""
-echo "🎯 PRIORITY 2: LoRA folder + VAE Models"
+echo "🎯 PRIORITY 2: LoRA files + VAE Models"
 echo "----------------------------------------"
 
 LIGHTNING_DIR="$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
 mkdir -p "$LIGHTNING_DIR"
 
 echo "Downloading Hugging Face LoRA files: Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
-download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_high_noise.safetensors"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" "$LIGHTNING_DIR/high_noise_model.safetensors"
 wait_for_aria2_downloads "LoRA files"
-download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_low_noise.safetensors"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" "$LIGHTNING_DIR/low_noise_model.safetensors"
 wait_for_aria2_downloads "LoRA files"
+
+echo "Downloading additional Hugging Face LoRAs"
+download_hf_folder_file "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_Lightx2v/Wan_2_2_I2V_A14B_HIGH_lightx2v_4step_lora_v1030_rank_64_bf16.safetensors" "$LORAS_DIR/Wan_2_2_I2V_A14B_HIGH_lightx2v_4step_lora_v1030_rank_64_bf16.safetensors"
+wait_for_aria2_downloads "additional LoRAs"
+download_hf_folder_file "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors" "$LORAS_DIR/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors"
+wait_for_aria2_downloads "additional LoRAs"
 
 $PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
 PID3=$!
@@ -317,9 +323,8 @@ PID3=$!
 echo "VAE PID: $PID3"
 echo "⏳ Waiting for VAE download (max 10 minutes)..."
 
-# Wait with timeout
 WAIT_COUNT=0
-MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
+MAX_WAIT=120
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
     if ! kill -0 $PID3 2>/dev/null; then
         echo "✅ VAE download complete"
@@ -336,7 +341,7 @@ if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
     kill $PID3 2>/dev/null
 fi
 
-echo "✅ LoRA folder & VAE models complete"
+echo "✅ LoRA files & VAE models complete"
 
 # ============================================================
 # PRIORITY 3: Upscaler & Embeddings (parallel)
