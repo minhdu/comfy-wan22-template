@@ -305,16 +305,10 @@ echo "----------------------------------------"
 LIGHTNING_DIR="$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
 mkdir -p "$LIGHTNING_DIR"
 
-echo "Downloading Hugging Face LoRA folder: Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+echo "Downloading Hugging Face LoRA files: Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
 download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_high_noise.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_high_noise.safetensors"
 wait_for_aria2_downloads "LoRA folder"
 download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_low_noise.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_low_noise.safetensors"
-wait_for_aria2_downloads "LoRA folder"
-download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/wanscript_high_noise.json" "$LIGHTNING_DIR/wanscript_high_noise.json"
-wait_for_aria2_downloads "LoRA folder"
-download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/wanscript_low_noise.json" "$LIGHTNING_DIR/wanscript_low_noise.json"
-wait_for_aria2_downloads "LoRA folder"
-download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-Lightning.mp4" "$LIGHTNING_DIR/Wan2.2-Lightning.mp4"
 wait_for_aria2_downloads "LoRA folder"
 
 $PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
