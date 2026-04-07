@@ -263,138 +263,86 @@ echo "  ✅ $VAE_DIR"
 echo "  ✅ $UPSCALE_DIR"
 echo "  ✅ $EMB_DIR"
 
-# Get API token from environment variable
-if [ -z "$civitai_token" ]; then
-    echo "⚠️  Warning: civitai_token environment variable not set"
-    echo "   Please set it in RunPod environment variables"
-    echo "   Skipping GGUF downloads..."
-    SKIP_GGUF=true
-else
-    echo "✅ CivitAI token found"
-    CIVITAI_TOKEN="$civitai_token"
-    SKIP_GGUF=false
-fi
+# Helper: wait until all aria2 downloads are done before starting the next heavy batch
+wait_for_aria2_downloads() {
+    local label="$1"
+    while pgrep -x "aria2c" > /dev/null; do
+        echo "⏳ Waiting for $label downloads to finish..."
+        sleep 5
+    done
+}
 
-# Function to download from CivitAI directly
-download_civitai() {
-    local model_id="$1"
-    local output_dir="$2"
-    local description="$3"
-    
-    echo "📦 Downloading $description (ID: $model_id) to $output_dir"
-    
-    local url="https://civitai.com/api/download/models/${model_id}?token=${CIVITAI_TOKEN}"
-    
-    aria2c \
-        --max-connection-per-server=4 \
-        --split=4 \
-        --min-split-size=1M \
-        --continue=true \
-        --auto-file-renaming=false \
-        --allow-overwrite=true \
-        --console-log-level=warn \
-        --summary-interval=30 \
-        --dir="$output_dir" \
-        "$url"
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Downloaded $description"
-        return 0
-    else
-        echo "❌ Failed to download $description"
-        return 1
-    fi
+# Helper: download a whole Hugging Face folder (explicit file list, same aria2 method)
+download_hf_folder_file() {
+    local url="$1"
+    local full_path="$2"
+    download_model "$url" "$full_path"
 }
 
 # ============================================================
 # PRIORITY 1: GGUF Models (download synchronously, one by one)
 # ============================================================
-if [ "$SKIP_GGUF" = false ]; then
-    echo ""
-    echo "🎯 PRIORITY 1: GGUF Models"
-    echo "----------------------------------------"
-
-    download_civitai 2060943 "$UNET_DIR" "GGUF Model 1 (2060943)"
-    download_civitai 2060527 "$UNET_DIR" "GGUF Model 2 (2060527)"
-
-    echo "✅ GGUF models download complete"
-    ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
-else
-    echo "⏭️  Skipping GGUF downloads (no token)"
-fi
-
-# ============================================================
-# PRIORITY 2: LoRA & VAE (download in parallel, small batch)
-# ============================================================
 echo ""
-echo "🎯 PRIORITY 2: LoRA & VAE Models"
+echo "🎯 PRIORITY 1: GGUF Models"
 echo "----------------------------------------"
 
-echo "Starting LoRA & VAE batch 1..."
-$PY /usr/local/bin/download_with_aria.py -m 1900322 -o "$LORAS_DIR" 2>&1 &
-PID1=$!
-PID2=$!
+wait_for_aria2_downloads "previous"
+download_model "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf"
+wait_for_aria2_downloads "GGUF"
+download_model "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf" "$UNET_DIR/Wan2.2-I2V-A14B-LowNoise-Q8_0.gguf"
+wait_for_aria2_downloads "GGUF"
+
+echo "✅ GGUF models download complete"
+ls -lh "$UNET_DIR/" 2>/dev/null || echo "⚠️  UNET directory empty"
+
+# ============================================================
+# PRIORITY 2: LoRA folder from Hugging Face + VAE
+# ============================================================
+echo ""
+echo "🎯 PRIORITY 2: LoRA folder + VAE Models"
+echo "----------------------------------------"
+
+LIGHTNING_DIR="$LORAS_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+mkdir -p "$LIGHTNING_DIR"
+
+echo "Downloading Hugging Face LoRA folder: Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_high_noise.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_high_noise.safetensors"
+wait_for_aria2_downloads "LoRA folder"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_low_noise.safetensors" "$LIGHTNING_DIR/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1_low_noise.safetensors"
+wait_for_aria2_downloads "LoRA folder"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/wanscript_high_noise.json" "$LIGHTNING_DIR/wanscript_high_noise.json"
+wait_for_aria2_downloads "LoRA folder"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/wanscript_low_noise.json" "$LIGHTNING_DIR/wanscript_low_noise.json"
+wait_for_aria2_downloads "LoRA folder"
+download_hf_folder_file "https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/Wan2.2-Lightning.mp4" "$LIGHTNING_DIR/Wan2.2-Lightning.mp4"
+wait_for_aria2_downloads "LoRA folder"
+
 $PY /usr/local/bin/download_with_aria.py -m 1191929 -o "$VAE_DIR" 2>&1 &
 PID3=$!
 
-echo "Batch 1 PIDs: $PID1, $PID2, $PID3"
-echo "⏳ Waiting for LoRA & VAE batch 1 (max 10 minutes)..."
+echo "VAE PID: $PID3"
+echo "⏳ Waiting for VAE download (max 10 minutes)..."
 
 # Wait with timeout
 WAIT_COUNT=0
 MAX_WAIT=120  # 10 minutes (120 * 5 seconds)
-
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    # Check if all processes are done
-    RUNNING=0
-    kill -0 $PID1 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID2 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID3 2>/dev/null && RUNNING=$((RUNNING + 1))
-    
-    if [ $RUNNING -eq 0 ]; then
-        echo "✅ Batch 1 complete"
+    if ! kill -0 $PID3 2>/dev/null; then
+        echo "✅ VAE download complete"
         break
     fi
-    
-    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
+
+    echo "📥 Still downloading VAE... (${WAIT_COUNT}s elapsed)"
     sleep 5
     WAIT_COUNT=$((WAIT_COUNT + 5))
 done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached for batch 1, killing stuck processes..."
-    kill $PID1 $PID2 $PID3 2>/dev/null
+    echo "⚠️  Timeout reached for VAE download, killing stuck process..."
+    kill $PID3 2>/dev/null
 fi
 
-echo "Starting LoRA batch 2..."
-PID4=$!
-PID5=$!
-
-echo "Batch 2 PIDs: $PID4, $PID5"
-echo "⏳ Waiting for LoRA batch 2 (max 10 minutes)..."
-
-WAIT_COUNT=0
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    RUNNING=0
-    kill -0 $PID4 2>/dev/null && RUNNING=$((RUNNING + 1))
-    kill -0 $PID5 2>/dev/null && RUNNING=$((RUNNING + 1))
-    
-    if [ $RUNNING -eq 0 ]; then
-        echo "✅ Batch 2 complete"
-        break
-    fi
-    
-    echo "📥 Still downloading... ($RUNNING processes active, ${WAIT_COUNT}s elapsed)"
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
-
-if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    echo "⚠️  Timeout reached for batch 2, killing stuck processes..."
-    kill $PID4 $PID5 2>/dev/null
-fi
-
-echo "✅ LoRA & VAE models complete"
+echo "✅ LoRA folder & VAE models complete"
 
 # ============================================================
 # PRIORITY 3: Upscaler & Embeddings (parallel)
@@ -679,7 +627,7 @@ fi
             echo "3. If you are using a B200 GPU, it is currently not supported"
             echo "4. If all else fails, open the web terminal by clicking \"connect\", \"enable web terminal\" and running:"
             echo "   cat comfyui_${RUNPOD_POD_ID}_nohup.log"
-            echo "   This should show a ComfyUI error. Please paste the error in HearmemanAI Discord Server for assistance."
+            echo "   This should show a ComfyUI error. Please paste the error to #lowhi on Discord for assistance."
             echo ""
             echo "📋 Startup logs location: $NETWORK_VOLUME/comfyui_${RUNPOD_POD_ID}_nohup.log"
             break
@@ -696,4 +644,3 @@ fi
     fi
 
     sleep infinity
-fi
